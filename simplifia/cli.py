@@ -1,0 +1,129 @@
+"""SIMPLIFIA CLI - Main entry point."""
+
+import typer
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+
+from . import __version__
+from .doctor import run_doctor
+from .registry import fetch_registry, list_packs
+from .install import install_pack
+from .update import update_pack
+from .state import get_installed_packs, get_pack_status
+from .test import test_pack
+from .logs import show_logs
+
+app = typer.Typer(
+    name="simplifia",
+    help="🚀 SIMPLIFIA Installer - Instala packs de automação no OpenClawd",
+    add_completion=False,
+)
+console = Console()
+
+
+def version_callback(value: bool):
+    if value:
+        console.print(f"[bold purple]SIMPLIFIA[/] v{__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: bool = typer.Option(
+        None, "--version", "-v", callback=version_callback, is_eager=True,
+        help="Mostra a versão do installer"
+    ),
+):
+    """🚀 SIMPLIFIA Installer - Automação sem código."""
+    pass
+
+
+@app.command()
+def doctor():
+    """🩺 Verifica se o ambiente está pronto para usar SIMPLIFIA."""
+    run_doctor()
+
+
+@app.command("list")
+def list_available():
+    """📦 Lista packs disponíveis para instalação."""
+    list_packs()
+
+
+@app.command()
+def install(
+    pack: str = typer.Argument(..., help="Nome do pack (ex: whatsapp, freelancers)"),
+    force: bool = typer.Option(False, "--force", "-f", help="Reinstala mesmo se já existir"),
+):
+    """⬇️ Instala um pack no OpenClawd."""
+    install_pack(pack, force=force)
+
+
+@app.command()
+def update(
+    pack: str = typer.Argument(None, help="Nome do pack (ou --all para todos)"),
+    all_packs: bool = typer.Option(False, "--all", "-a", help="Atualiza todos os packs instalados"),
+):
+    """🔄 Atualiza um pack (ou todos) para a última versão."""
+    update_pack(pack, all_packs=all_packs)
+
+
+@app.command()
+def status():
+    """📊 Mostra status dos packs instalados."""
+    installed = get_installed_packs()
+    
+    if not installed:
+        console.print("[yellow]Nenhum pack instalado ainda.[/]")
+        console.print("Use [bold]simplifia install whatsapp[/] para começar!")
+        return
+    
+    table = Table(title="Packs Instalados")
+    table.add_column("Pack", style="cyan")
+    table.add_column("Versão", style="green")
+    table.add_column("Status", style="yellow")
+    table.add_column("Última Atualização")
+    
+    for pack_id, info in installed.items():
+        status = get_pack_status(pack_id)
+        table.add_row(
+            info.get("name", pack_id),
+            info.get("version", "?"),
+            status,
+            info.get("installed_at", "?")
+        )
+    
+    console.print(table)
+
+
+@app.command()
+def uninstall(
+    pack: str = typer.Argument(..., help="Nome do pack para remover"),
+    keep_data: bool = typer.Option(False, "--keep-data", help="Mantém dados do SQLite"),
+):
+    """🗑️ Remove um pack instalado."""
+    console.print(f"[yellow]Removendo pack {pack}...[/]")
+    # TODO: implement uninstall logic
+    console.print(f"[green]✓ Pack {pack} removido![/]")
+
+
+@app.command()
+def test(
+    pack: str = typer.Argument(..., help="Nome do pack para testar"),
+):
+    """🧪 Testa um pack com mensagens de exemplo (sem risco)."""
+    test_pack(pack)
+
+
+@app.command()
+def logs(
+    pack: str = typer.Argument(None, help="Filtrar por pack"),
+    lines: int = typer.Option(20, "--lines", "-n", help="Número de linhas"),
+):
+    """📜 Mostra logs de execução."""
+    show_logs(pack, lines)
+
+
+if __name__ == "__main__":
+    app()

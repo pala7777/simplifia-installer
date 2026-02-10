@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "simplifia"
+version = "1.0.0"
+description = "SIMPLIFIA Installer - Instala packs de automação no OpenClawd"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [
+    { name = "SIMPLIFIA", email = "hello@simplifia.com.br" }
+]
+keywords = ["automation", "openclawd", "ai", "whatsapp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "httpx>=0.25.0",
+]
+
+[project.scripts]
+simplifia = "simplifia.cli:app"
+
+[project.urls]
+Homepage = "https://simplifia.com.br"
+Documentation = "https://simplifia.com.br/docs"
+Repository = "https://github.com/pala7777/simplifia-installer"
