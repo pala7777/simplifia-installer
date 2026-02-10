@@ -124,5 +124,74 @@ def logs(
     show_logs(pack, lines)
 
 
+# Clawdbot subcommands
+clawdbot_app = typer.Typer(
+    name="clawdbot",
+    help="🐳 Gerenciar Clawdbot (Docker)",
+)
+app.add_typer(clawdbot_app, name="clawdbot")
+
+
+@clawdbot_app.command("doctor")
+def clawdbot_doctor_cmd():
+    """🩺 Verifica se Docker está pronto para Clawdbot."""
+    from .clawdbot import clawdbot_doctor
+    clawdbot_doctor()
+
+
+@clawdbot_app.command("install")
+def clawdbot_install_cmd(
+    docker: bool = typer.Option(True, "--docker", "-d", help="Instalar via Docker"),
+):
+    """⬇️ Instala Clawdbot via Docker."""
+    from .clawdbot import clawdbot_install
+    clawdbot_install(use_docker=docker)
+
+
+@clawdbot_app.command("start")
+def clawdbot_start_cmd():
+    """🚀 Inicia o container do Clawdbot."""
+    from .clawdbot import clawdbot_start
+    clawdbot_start()
+
+
+@clawdbot_app.command("stop")
+def clawdbot_stop_cmd():
+    """⏹️ Para o container do Clawdbot."""
+    from .clawdbot import clawdbot_stop
+    clawdbot_stop()
+
+
+@clawdbot_app.command("status")
+def clawdbot_status_cmd():
+    """📊 Mostra status do Clawdbot."""
+    from .clawdbot import clawdbot_status
+    clawdbot_status()
+
+
+@clawdbot_app.command("logs")
+def clawdbot_logs_cmd(
+    lines: int = typer.Option(50, "--lines", "-n", help="Número de linhas"),
+    follow: bool = typer.Option(False, "--follow", "-f", help="Seguir logs em tempo real"),
+):
+    """📜 Mostra logs do Clawdbot."""
+    from .clawdbot import clawdbot_logs
+    clawdbot_logs(lines=lines, follow=follow)
+
+
+@clawdbot_app.command("update")
+def clawdbot_update_cmd():
+    """🔄 Atualiza Clawdbot para última versão."""
+    from .clawdbot import clawdbot_update
+    clawdbot_update()
+
+
+@clawdbot_app.command("uninstall")
+def clawdbot_uninstall_cmd():
+    """🗑️ Remove Clawdbot."""
+    from .clawdbot import clawdbot_uninstall
+    clawdbot_uninstall()
+
+
 if __name__ == "__main__":
     app()
