@@ -127,10 +127,68 @@ def install_pack(pack_id: str, force: bool = False):
             "installed_at": datetime.now().isoformat(),
         })
         
+        # Generate first run report
+        generate_first_run_report(pack_id, pack_config, version)
+        
         console.print()
         console.print(f"[green bold]✓ Pack {pack_id} instalado com sucesso![/]")
         console.print(f"  Use [bold]simplifia test {pack_id}[/] para testar.")
+        console.print(f"  Relatório: [dim]~/.simplifia/RELATORIO-PRIMEIRO-USO.md[/]")
         return True
+
+
+def generate_first_run_report(pack_id: str, pack_config: dict, version: str):
+    """Generate first run report markdown file."""
+    from .doctor import get_simplifia_path
+    
+    report_path = get_simplifia_path() / "RELATORIO-PRIMEIRO-USO.md"
+    
+    report = f"""# SIMPLIFIA - Relatório de Instalação
+
+**Pack:** {pack_config.get('name', pack_id)}
+**Versão:** {version}
+**Instalado em:** {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+## Arquivos instalados
+
+### Workflows
+- `~/.simplifia/workflows/{pack_id}/`
+
+### Regras
+- `~/.simplifia/rules/{pack_id}/`
+
+### Assets
+- `~/.simplifia/assets/{pack_id}/`
+
+## Comandos úteis
+
+```bash
+# Testar o pack
+simplifia test {pack_id}
+
+# Ver status
+simplifia status
+
+# Atualizar
+simplifia update {pack_id}
+
+# Ver logs
+simplifia logs
+```
+
+## Modo Seguro
+
+Os blueprints geram **rascunhos e sugestões**. Você revisa antes de enviar.
+Nada é enviado automaticamente por padrão.
+
+## Suporte
+
+- Portal: https://simplifia.vercel.app
+- Documentação: https://simplifia.vercel.app/downloads
+"""
+    
+    report_path.write_text(report)
+    console.print(f"[dim]📄 Relatório salvo em {report_path}[/]")
 
 
 def run_sqlite_migrations(extract_path: Path, db_config: dict):

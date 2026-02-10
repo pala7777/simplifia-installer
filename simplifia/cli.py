@@ -103,9 +103,8 @@ def uninstall(
     keep_data: bool = typer.Option(False, "--keep-data", help="Mantém dados do SQLite"),
 ):
     """🗑️ Remove um pack instalado."""
-    console.print(f"[yellow]Removendo pack {pack}...[/]")
-    # TODO: implement uninstall logic
-    console.print(f"[green]✓ Pack {pack} removido![/]")
+    from .uninstall import uninstall_pack
+    uninstall_pack(pack, keep_data=keep_data)
 
 
 @app.command()
