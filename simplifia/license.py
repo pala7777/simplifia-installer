@@ -5,8 +5,42 @@ import os
 from pathlib import Path
 from typing import Optional
 import httpx
+import typer
+from rich.console import Console
 
 from .output import print_ok, print_warn, print_error, print_info, print_header, IS_WINDOWS
+
+console = Console()
+
+
+def require_session_or_exit() -> dict:
+    """Require valid session token or exit with instructions.
+    
+    Returns:
+        Manifest dict with entitlements and packs
+        
+    Raises:
+        typer.Exit: If no auth or session invalid
+    """
+    from .auth import load_auth
+    from .api import get_manifest, ApiError
+    
+    auth = load_auth()
+    if not auth or not auth.session_token:
+        console.print("[yellow]Ativacao necessaria.[/yellow]")
+        console.print("1) Telegram: https://t.me/SimplifIABot")
+        console.print("2) /ativar SEU-CODIGO")
+        console.print("3) Depois: simplifia activate <TOKEN>")
+        raise typer.Exit(code=2)
+    
+    try:
+        return get_manifest(auth.session_token)
+    except ApiError as e:
+        if "UNAUTHORIZED" in str(e):
+            console.print("[yellow]Sessao expirada ou invalida.[/yellow]")
+            console.print("Execute novamente: simplifia activate <TOKEN>")
+            raise typer.Exit(code=3)
+        raise
 
 # License API endpoint
 LICENSE_API = "https://simplifia.vercel.app/api/license"
@@ -208,55 +242,35 @@ def run_license_status():
 
 
 def check_entitlement_or_exit(pack_id: str) -> bool:
-    """Check entitlement for a pack, print message and return False if not entitled.
+    """Check entitlement for a pack, exit if not entitled.
     
     Use this before installing a pack.
-    Checks both new token-based auth and legacy license system.
+    Uses new token-based auth (Telegram) with fallback to legacy.
     """
-    # First, check new token-based auth (from Telegram)
+    # Base is always allowed
+    if pack_id == 'base':
+        return True
+    
+    # Try new token-based auth first
     try:
-        from .auth import load_auth
-        from .api import get_manifest, ApiError
+        manifest = require_session_or_exit()
+        entitlements = manifest.get("entitlements", [])
         
-        auth = load_auth()
-        if auth and auth.session_token:
-            try:
-                # Check with server
-                manifest = get_manifest(auth.session_token)
-                entitlements = manifest.get("entitlements", [])
-                
-                # Base is always allowed
-                if pack_id == 'base':
-                    return True
-                
-                if pack_id in entitlements or 'all' in entitlements:
-                    return True
-                
-                # Not entitled via token auth
-                print_error(f"Voce nao tem acesso ao pack '{pack_id}'.")
-                print("")
-                print_info("Seus packs liberados: " + ", ".join(entitlements))
-                print_info("Compre mais em: https://simplifia.com.br/comprar")
-                print("")
-                return False
-                
-            except ApiError as e:
-                if "UNAUTHORIZED" in str(e):
-                    # Session expired - prompt re-auth
-                    print_error("Sessao expirada.")
-                    print("")
-                    print_info("Renove seu token via Telegram:")
-                    print("      1. Abra @SimplifIABot no Telegram")
-                    print("      2. Envie /instalar")
-                    print("      3. Copie o novo token")
-                    print("      4. Execute: simplifia activate <TOKEN>")
-                    print("")
-                    return False
-                # Other API error - fall through to legacy check
-                pass
-                
+        if pack_id in entitlements or 'all' in entitlements:
+            return True
+        
+        # Not entitled
+        console.print(f"[red]Voce nao tem acesso ao pack '{pack_id}'.[/red]")
+        console.print("")
+        console.print(f"Seus packs: {', '.join(entitlements) if entitlements else '(nenhum)'}")
+        console.print("Compre mais em: https://simplifia.com.br/comprar")
+        return False
+        
+    except typer.Exit:
+        raise  # Re-raise exit from require_session_or_exit
+        
     except Exception:
-        # If new auth fails, fall through to legacy check
+        # Fall through to legacy check
         pass
     
     # Legacy check (old license.json system)
