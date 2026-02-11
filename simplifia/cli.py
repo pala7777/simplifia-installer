@@ -68,10 +68,32 @@ def config_reset():
 
 
 @app.command()
-def doctor():
+def doctor(
+    auto_install: bool = typer.Option(True, "--auto-install/--no-auto-install", 
+                                       help="Auto-instalar runtime se Docker disponível"),
+):
     """🩺 Verifica se o ambiente está pronto para usar SIMPLIFIA."""
+    import os
     ensure_setup()
-    run_doctor()
+    all_ok, docker_installed, docker_running, clawdbot_running = run_doctor()
+    
+    # Auto-install runtime if Docker is available but Clawdbot not running
+    if auto_install and docker_running and not clawdbot_running:
+        console.print()
+        console.print("[cyan]Docker detectado! Instalando motor automaticamente...[/]")
+        
+        from .clawdbot import clawdbot_install, clawdbot_start
+        
+        # Set non-interactive mode
+        os.environ['SIMPLIFIA_NONINTERACTIVE'] = '1'
+        
+        try:
+            clawdbot_install(use_docker=True)
+            clawdbot_start()
+            console.print("[green bold]✓ Motor Clawdbot instalado e iniciado![/]")
+        except Exception as e:
+            console.print(f"[yellow]⚠ Não foi possível instalar automaticamente: {e}[/]")
+            console.print("  Execute manualmente: [bold]simplifia clawdbot install --docker[/bold]")
 
 
 @app.command("list")

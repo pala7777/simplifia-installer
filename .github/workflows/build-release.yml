@@ -32,7 +32,7 @@ jobs:
 
       - name: Build Windows executable
         run: |
-          pyinstaller --onefile --name simplifia --console --collect-all simplifia --collect-all rich --hidden-import=simplifia --hidden-import=rich simplifia/__main__.py
+          pyinstaller --onefile --name simplifia --console --collect-all simplifia --collect-all rich --collect-data rich._unicode_data --copy-metadata rich --hidden-import=simplifia --hidden-import=rich --hidden-import=rich._unicode_data simplifia/__main__.py
           
       - name: Test executable
         run: |
@@ -64,7 +64,7 @@ jobs:
 
       - name: Build Linux executable
         run: |
-          pyinstaller --onefile --name simplifia --console --collect-all simplifia --collect-all rich --hidden-import=simplifia --hidden-import=rich simplifia/__main__.py
+          pyinstaller --onefile --name simplifia --console --collect-all simplifia --collect-all rich --collect-data rich._unicode_data --copy-metadata rich --hidden-import=simplifia --hidden-import=rich --hidden-import=rich._unicode_data simplifia/__main__.py
           chmod +x dist/simplifia
           
       - name: Test executable
@@ -97,7 +97,7 @@ jobs:
 
       - name: Build macOS executable
         run: |
-          pyinstaller --onefile --name simplifia --console --collect-all simplifia --collect-all rich --hidden-import=simplifia --hidden-import=rich simplifia/__main__.py
+          pyinstaller --onefile --name simplifia --console --collect-all simplifia --collect-all rich --collect-data rich._unicode_data --copy-metadata rich --hidden-import=simplifia --hidden-import=rich --hidden-import=rich._unicode_data simplifia/__main__.py
           chmod +x dist/simplifia
           
       - name: Test executable
