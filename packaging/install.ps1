@@ -237,10 +237,22 @@ if ($runtimeInstalled) {
 
 # Check Docker availability
 $dockerAvailable = $false
+$imageExists = $false
+$dockerImage = "ghcr.io/pala7777/simplifia-clawdbot:latest"
+
 try {
     docker info 2>&1 | Out-Null
     $dockerAvailable = $true
     Write-Success "Docker disponível"
+    
+    # Check if image exists (can be pulled)
+    $manifestCheck = docker manifest inspect $dockerImage 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        $imageExists = $true
+        Write-Success "Imagem Docker disponível"
+    } else {
+        Write-Warning "Imagem Docker ainda não publicada"
+    }
 } catch {
     try {
         docker --version 2>&1 | Out-Null
@@ -265,7 +277,7 @@ if ($runtimeInstalled) {
             simplifia clawdbot start
         }
     }
-} elseif ($dockerAvailable) {
+} elseif ($dockerAvailable -and $imageExists) {
     Write-Host ""
     Write-Host "O motor OpenClaw/Clawdbot é necessário para rodar automações." -ForegroundColor Cyan
     Write-Host "Ele roda via Docker (isolado, seguro, fácil de remover)." -ForegroundColor Cyan
@@ -282,6 +294,15 @@ if ($runtimeInstalled) {
         Write-Host ""
         Write-Host "  Nota: Packs exigem o runtime para funcionar." -ForegroundColor Yellow
     }
+} elseif ($dockerAvailable -and -not $imageExists) {
+    Write-Warning "Runtime não instalado (imagem ainda não publicada)"
+    Write-Host ""
+    Write-Host "  O motor Docker estará disponível em breve." -ForegroundColor White
+    Write-Host "  Por enquanto, você pode usar os packs com workflows manuais." -ForegroundColor White
+    Write-Host ""
+    Write-Host "  Quando a imagem estiver disponível, rode:" -ForegroundColor White
+    Write-Host "    simplifia clawdbot install --docker" -ForegroundColor Cyan
+    Write-Host "    simplifia clawdbot start" -ForegroundColor Cyan
 } else {
     Write-Warning "Docker não disponível - runtime não será instalado"
     Write-Host ""

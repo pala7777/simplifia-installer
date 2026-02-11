@@ -11,6 +11,52 @@ from rich.prompt import Prompt, Confirm
 
 console = Console()
 
+# Default image - hosted on GitHub Container Registry
+DEFAULT_IMAGE = "ghcr.io/pala7777/simplifia-clawdbot:latest"
+
+
+def check_docker_available() -> bool:
+    """Check if Docker is installed and running."""
+    if not shutil.which('docker'):
+        return False
+    try:
+        result = subprocess.run(['docker', 'info'], capture_output=True, timeout=10)
+        return result.returncode == 0
+    except:
+        return False
+
+
+def check_image_exists(image: str = DEFAULT_IMAGE) -> bool:
+    """Check if the Docker image exists (try to pull it)."""
+    if not check_docker_available():
+        return False
+    try:
+        result = subprocess.run(
+            ['docker', 'manifest', 'inspect', image],
+            capture_output=True,
+            timeout=30
+        )
+        return result.returncode == 0
+    except:
+        return False
+
+
+def can_install_runtime() -> tuple[bool, str]:
+    """Check if runtime can be installed automatically.
+    
+    Returns: (can_install, reason)
+    """
+    if not shutil.which('docker'):
+        return False, "Docker não instalado"
+    
+    if not check_docker_available():
+        return False, "Docker não está rodando"
+    
+    if not check_image_exists():
+        return False, "Imagem Docker ainda não publicada"
+    
+    return True, "OK"
+
 def get_clawdbot_dir() -> Path:
     """Get Clawdbot installation directory."""
     if os.name == 'nt':  # Windows

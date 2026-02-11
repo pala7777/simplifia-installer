@@ -246,10 +246,21 @@ fi
 
 # Check Docker availability
 DOCKER_AVAILABLE=false
+DOCKER_IMAGE="ghcr.io/pala7777/simplifia-clawdbot:latest"
+IMAGE_EXISTS=false
+
 if command -v docker &> /dev/null; then
     if docker info &> /dev/null; then
         DOCKER_AVAILABLE=true
         print_success "Docker disponível"
+        
+        # Check if image exists (can be pulled)
+        if docker manifest inspect "$DOCKER_IMAGE" &> /dev/null; then
+            IMAGE_EXISTS=true
+            print_success "Imagem Docker disponível"
+        else
+            print_warning "Imagem Docker ainda não publicada"
+        fi
     else
         print_warning "Docker instalado mas não está rodando"
     fi
@@ -269,7 +280,7 @@ if [ "$RUNTIME_INSTALLED" = true ]; then
             simplifia clawdbot start
         fi
     fi
-elif [ "$DOCKER_AVAILABLE" = true ]; then
+elif [ "$DOCKER_AVAILABLE" = true ] && [ "$IMAGE_EXISTS" = true ]; then
     echo ""
     echo -e "${CYAN}O motor OpenClaw/Clawdbot é necessário para rodar automações.${NC}"
     echo -e "${CYAN}Ele roda via Docker (isolado, seguro, fácil de remover).${NC}"
@@ -286,6 +297,15 @@ elif [ "$DOCKER_AVAILABLE" = true ]; then
         echo ""
         echo -e "  ${YELLOW}Nota: Packs exigem o runtime para funcionar.${NC}"
     fi
+elif [ "$DOCKER_AVAILABLE" = true ] && [ "$IMAGE_EXISTS" = false ]; then
+    print_warning "Runtime não instalado (imagem ainda não publicada)"
+    echo ""
+    echo -e "  O motor Docker estará disponível em breve."
+    echo -e "  Por enquanto, você pode usar os packs com workflows manuais."
+    echo ""
+    echo -e "  Quando a imagem estiver disponível, rode:"
+    echo -e "    ${BOLD}simplifia clawdbot install --docker${NC}"
+    echo -e "    ${BOLD}simplifia clawdbot start${NC}"
 else
     print_warning "Docker não disponível - runtime não será instalado"
     echo ""

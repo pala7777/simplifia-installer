@@ -4,7 +4,7 @@
 
 services:
   clawdbot:
-    image: ${CLAWDBOT_IMAGE:-ghcr.io/clawdbot/clawdbot:latest}
+    image: ${CLAWDBOT_IMAGE:-ghcr.io/pala7777/simplifia-clawdbot:latest}
     container_name: simplifia-clawdbot
     restart: unless-stopped
     ports:
