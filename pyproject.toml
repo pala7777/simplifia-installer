@@ -38,3 +38,12 @@ simplifia = "simplifia.cli:app"
 Homepage = "https://simplifia.com.br"
 Documentation = "https://simplifia.com.br/docs"
 Repository = "https://github.com/pala7777/simplifia-installer"
+
+[tool.hatch.build.targets.wheel]
+packages = ["simplifia"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/simplifia",
+    "/packaging",
+]

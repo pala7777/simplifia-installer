@@ -22,7 +22,8 @@ def get_clawdbot_dir() -> Path:
 
 def get_assets_dir() -> Path:
     """Get assets directory from package."""
-    return Path(__file__).parent.parent / 'assets' / 'clawdbot'
+    # Assets are now inside the simplifia package
+    return Path(__file__).parent / 'assets' / 'clawdbot'
 
 
 def clawdbot_doctor():
