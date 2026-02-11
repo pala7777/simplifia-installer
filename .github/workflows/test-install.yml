@@ -101,13 +101,19 @@ jobs:
       - name: Add Python Scripts to PATH
         shell: pwsh
         run: |
-          $userBase = python -c "import site; print(site.USER_BASE)"
+          $userBase = (python -c "import site; print(site.USER_BASE)").Trim()
           $scriptsPath = Join-Path $userBase "Scripts"
-          echo "$scriptsPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Write-Host "Scripts path: $scriptsPath"
+          Write-Host "Exists: $(Test-Path $scriptsPath)"
+          Get-ChildItem $scriptsPath -ErrorAction SilentlyContinue | Select -First 5
+          Add-Content -Path $env:GITHUB_PATH -Value $scriptsPath
+          Write-Host "Added to GITHUB_PATH"
           
       - name: Verify CLI
         shell: pwsh
         run: |
+          Write-Host "PATH: $env:PATH"
+          Get-Command simplifia -ErrorAction SilentlyContinue
           simplifia --version
           
       - name: Run doctor
