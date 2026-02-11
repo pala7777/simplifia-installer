@@ -3,22 +3,25 @@
 import os
 import json
 from pathlib import Path
-from typing import Optional
 
-import typer
-from rich.console import Console
-from rich.panel import Panel
-from rich.prompt import Prompt, Confirm
+from .output import (
+    print_header, print_ok, print_warn, print_info, print_next,
+    print_divider, ask_choice, ask_input, ask_yes_no, IS_WINDOWS
+)
 
-console = Console()
-
-CONFIG_FILE = Path.home() / ".simplifia" / "config.json"
+if IS_WINDOWS:
+    CONFIG_FILE = Path(os.environ.get('USERPROFILE', '~')) / ".simplifia" / "config.json"
+else:
+    CONFIG_FILE = Path.home() / ".simplifia" / "config.json"
 
 
 def get_config() -> dict:
     """Load existing config or return empty dict."""
     if CONFIG_FILE.exists():
-        return json.loads(CONFIG_FILE.read_text())
+        try:
+            return json.loads(CONFIG_FILE.read_text())
+        except Exception:
+            return {}
     return {}
 
 
@@ -46,144 +49,114 @@ def run_setup(force: bool = False, advanced: bool = False):
     
     # Check for non-interactive mode
     if os.environ.get("SIMPLIFIA_NONINTERACTIVE"):
-        console.print("[yellow]Modo não-interativo: usando defaults[/]")
+        print("  [>] Modo nao-interativo: usando defaults")
         config = {
             "setup_complete": True,
-            "mode": "beginner",
-            "llm_provider": "openai",
-            "llm_configured": False,
+            "mode": "iniciante",
+            "provider": "openai",
+            "api_key": "",
         }
         save_config(config)
         return True
     
-    console.print()
-    console.print(Panel.fit(
-        "[bold purple]🚀 Bem-vindo ao SIMPLIFIA![/]\n"
-        "Vamos configurar em poucos passos.",
-        border_style="purple"
-    ))
-    console.print()
+    print_header("Bem-vindo ao SIMPLIFIA!")
+    print("  Vamos configurar em poucos passos.")
+    print("  (A IA e paga a parte - voce usa sua propria API key)")
+    print("")
     
     config = get_config()
     
     # PERGUNTA 1: Modo
-    if not advanced:
-        console.print("[bold]Pergunta 1 de 3[/]")
-        mode = Prompt.ask(
-            "Qual modo você prefere?",
-            choices=["iniciante", "avancado"],
-            default="iniciante"
-        )
-        advanced = (mode == "avancado")
-        config["mode"] = mode
-    else:
-        config["mode"] = "avancado"
+    print("--- Pergunta 1 de 3 ---")
+    mode_idx = ask_choice(
+        "Qual modo voce prefere?",
+        ["Iniciante (recomendado)", "Avancado (todas as opcoes)"],
+        default=0
+    )
+    mode = "avancado" if mode_idx == 1 else "iniciante"
+    config["mode"] = mode
+    advanced = (mode == "avancado")
     
-    console.print()
+    # PERGUNTA 2: Provider
+    print("")
+    print("--- Pergunta 2 de 3 ---")
     
-    # PERGUNTA 2: LLM Provider
     if advanced:
-        console.print("[bold]Escolha seu provider de IA:[/]")
-        console.print("  1. OpenAI (GPT-4, GPT-3.5)")
-        console.print("  2. Anthropic (Claude)")
-        console.print("  3. OpenRouter (múltiplos modelos)")
-        console.print("  4. Ollama (local, grátis)")
-        console.print("  5. Outro / Configurar depois")
-        console.print()
-        
-        provider_choice = Prompt.ask(
-            "Qual provider?",
-            choices=["1", "2", "3", "4", "5"],
-            default="1"
+        provider_idx = ask_choice(
+            "Qual provider de IA voce vai usar?",
+            [
+                "OpenAI (GPT-4, ChatGPT)",
+                "Anthropic (Claude)",
+                "OpenRouter (multiplos modelos)",
+                "Ollama (local, gratis)",
+                "Configurar depois"
+            ],
+            default=0
         )
-        provider_map = {
-            "1": "openai",
-            "2": "anthropic", 
-            "3": "openrouter",
-            "4": "ollama",
-            "5": "skip"
-        }
-        provider = provider_map[provider_choice]
+        provider_map = ["openai", "anthropic", "openrouter", "ollama", "skip"]
+        provider = provider_map[provider_idx]
     else:
-        console.print("[bold]Pergunta 2 de 3[/]")
-        provider = Prompt.ask(
-            "Qual IA você vai usar?",
-            choices=["openai", "anthropic", "outro"],
-            default="openai"
+        provider_idx = ask_choice(
+            "Qual IA voce vai usar?",
+            ["OpenAI (ChatGPT)", "Anthropic (Claude)", "Configurar depois"],
+            default=0
         )
-        if provider == "outro":
-            provider = "skip"
+        provider_map = ["openai", "anthropic", "skip"]
+        provider = provider_map[provider_idx]
     
-    config["llm_provider"] = provider
-    console.print()
+    config["provider"] = provider
     
-    # PERGUNTA 3: API Key (if applicable)
-    if provider not in ["ollama", "skip"]:
-        if advanced:
-            console.print(f"[bold]Cole sua API key do {provider.title()}:[/]")
-            console.print("[dim](A chave fica salva localmente em ~/.simplifia/config.json)[/]")
+    # PERGUNTA 3: API Key
+    print("")
+    print("--- Pergunta 3 de 3 ---")
+    
+    if provider in ["ollama", "skip"]:
+        if provider == "ollama":
+            print_ok("Ollama nao precisa de API key")
+            config["api_key"] = ""
         else:
-            console.print("[bold]Pergunta 3 de 3[/]")
-            console.print(f"[dim]Se não tiver a API key agora, aperte Enter para pular.[/]")
+            print_info("Voce pode configurar a API key depois com: simplifia setup --force")
+            config["api_key"] = ""
+    else:
+        print(f"  Cole sua API key do {provider.title()}.")
+        print("  (Se nao tiver agora, aperte Enter para pular)")
+        print("")
         
-        api_key = Prompt.ask(
-            f"API key ({provider})",
-            default="",
-            password=True
-        )
+        # Get API key URLs
+        key_urls = {
+            "openai": "https://platform.openai.com/api-keys",
+            "anthropic": "https://console.anthropic.com/settings/keys",
+            "openrouter": "https://openrouter.ai/keys"
+        }
+        if provider in key_urls:
+            print_info(f"Pegue sua chave em: {key_urls[provider]}")
+            print("")
+        
+        api_key = ask_input(f"API key ({provider})", secret=True)
         
         if api_key:
-            config[f"{provider}_api_key"] = api_key
-            config["llm_configured"] = True
-            console.print("[green]✓ API key salva[/]")
+            config["api_key"] = api_key
+            print_ok("API key salva")
         else:
-            config["llm_configured"] = False
-            console.print("[yellow]⚠ Sem API key - você pode adicionar depois[/]")
-    elif provider == "ollama":
-        config["llm_configured"] = True
-        console.print("[green]✓ Ollama não precisa de API key[/]")
-    else:
-        config["llm_configured"] = False
+            config["api_key"] = ""
+            print_warn("Sem API key - voce pode adicionar depois")
+            print_info("Execute: simplifia setup --force")
     
-    console.print()
-    
-    # Advanced-only questions
-    if advanced:
-        # OpenClawd path
-        openclawd_default = str(Path.home() / ".openclawd")
-        openclawd_path = Prompt.ask(
-            "Pasta do OpenClawd",
-            default=openclawd_default
-        )
-        config["openclawd_path"] = openclawd_path
-        
-        # Auto-update
-        auto_update = Confirm.ask(
-            "Verificar atualizações automaticamente?",
-            default=True
-        )
-        config["auto_update"] = auto_update
-        
-        # Analytics
-        analytics = Confirm.ask(
-            "Enviar dados anônimos de uso (ajuda a melhorar)?",
-            default=False
-        )
-        config["analytics"] = analytics
-        console.print()
-    
-    # Mark as complete
+    # Mark complete
     config["setup_complete"] = True
     save_config(config)
     
-    console.print(Panel.fit(
-        "[bold green]✓ Configuração concluída![/]\n\n"
-        "Próximos passos:\n"
-        "  [bold]simplifia doctor[/]  → Verificar ambiente\n"
-        "  [bold]simplifia list[/]    → Ver packs disponíveis\n"
-        "  [bold]simplifia install whatsapp[/] → Instalar pack",
-        border_style="green"
-    ))
+    print_divider()
+    print_ok("Configuracao concluida!")
+    print("")
+    print("  Proximos passos:")
+    print("")
+    print("      simplifia doctor           -> Verificar ambiente")
+    print("      simplifia install whatsapp -> Instalar pack WhatsApp")
+    print("")
+    print_info("Lembrete: A IA (OpenAI/Claude) e paga a parte.")
+    print_info("Voce controla seus gastos diretamente na conta deles.")
+    print("")
     
     return True
 
@@ -193,24 +166,25 @@ def show_config():
     config = get_config()
     
     if not config:
-        console.print("[yellow]Nenhuma configuração encontrada.[/]")
-        console.print("Use [bold]simplifia setup[/] para configurar.")
+        print_warn("Nenhuma configuracao encontrada.")
+        print_info("Use: simplifia setup")
         return
     
-    console.print(Panel.fit("[bold]Configuração atual[/]", border_style="purple"))
+    print_header("Configuracao atual")
     
     # Hide sensitive data
-    display_config = config.copy()
-    for key in display_config:
-        if "api_key" in key and display_config[key]:
-            display_config[key] = display_config[key][:8] + "..."
+    for key, value in config.items():
+        display_value = value
+        if "key" in key.lower() and value and len(str(value)) > 10:
+            display_value = str(value)[:8] + "..."
+        print(f"  {key}: {display_value}")
     
-    for key, value in display_config.items():
-        console.print(f"  {key}: [cyan]{value}[/]")
+    print("")
 
 
 def reset_config():
     """Reset configuration to defaults."""
     if CONFIG_FILE.exists():
         CONFIG_FILE.unlink()
-    console.print("[green]✓ Configuração resetada[/]")
+    print_ok("Configuracao resetada")
+    print_info("Execute: simplifia setup")

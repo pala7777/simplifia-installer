@@ -1,34 +1,24 @@
 """Doctor command - verifies environment is ready."""
 
+import json
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
-# Detect Windows and use plain mode (ASCII-safe)
-IS_WINDOWS = os.name == 'nt'
-USE_PLAIN_MODE = IS_WINDOWS
-
-# Configure Rich for Windows compatibility
-if USE_PLAIN_MODE:
-    # Force UTF-8 on Windows
-    if IS_WINDOWS:
-        try:
-            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
-        except Exception:
-            pass
-
-from rich.console import Console
-
-# Create console with Windows-safe settings
-console = Console(
-    force_terminal=True,
-    no_color=USE_PLAIN_MODE,
-    emoji=not USE_PLAIN_MODE,
-    highlight=not USE_PLAIN_MODE,
+from .output import (
+    print_header, print_ok, print_warn, print_error, 
+    print_info, print_next, print_divider, IS_WINDOWS
 )
+
+
+def get_simplifia_path() -> Path:
+    """Get SIMPLIFIA config path (cross-platform)."""
+    if IS_WINDOWS:
+        base = Path(os.environ.get('USERPROFILE', '~'))
+    else:
+        base = Path.home()
+    return base / '.simplifia'
 
 
 def get_openclawd_path() -> Path:
@@ -44,231 +34,169 @@ def get_openclawd_path() -> Path:
     return base / '.openclawd'
 
 
-def get_simplifia_path() -> Path:
-    """Get SIMPLIFIA config path (cross-platform)."""
-    if IS_WINDOWS:
-        base = Path(os.environ.get('USERPROFILE', '~'))
-    else:
-        base = Path.home()
-    return base / '.simplifia'
+def check_docker_installed() -> bool:
+    """Check if docker command exists."""
+    return shutil.which('docker') is not None
 
 
-def check_docker_available() -> tuple[bool, bool]:
-    """Check if Docker is installed and running.
-    
-    Returns:
-        (installed, running) - tuple of bools
-    """
-    # Check if docker command exists
-    if shutil.which('docker') is None:
-        return False, False
-    
-    # Check if Docker daemon is running
+def check_docker_running() -> bool:
+    """Check if Docker daemon is running."""
     try:
         result = subprocess.run(
             ['docker', 'info'],
             capture_output=True,
             timeout=10
         )
-        return True, result.returncode == 0
-    except (subprocess.TimeoutExpired, Exception):
-        return True, False
-
-
-def check_clawdbot_running() -> bool:
-    """Check if Clawdbot container is running."""
-    try:
-        result = subprocess.run(
-            ['docker', 'ps', '--filter', 'name=clawdbot', '--format', '{{.Names}}'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        return 'clawdbot' in result.stdout
+        return result.returncode == 0
     except Exception:
         return False
 
 
-def _print_check(name: str, ok: bool, detail: str = ""):
-    """Print a check result in ASCII-safe format."""
-    status = "[OK]" if ok else "[X]"
-    color = "green" if ok else "red"
-    detail_str = f" ({detail})" if detail else ""
+def check_runtime_running() -> bool:
+    """Check if Clawdbot/OpenClaw runtime container is running.
     
-    if USE_PLAIN_MODE:
-        print(f"  {status} {name}{detail_str}")
-    else:
-        status_fmt = f"[{color}]{status}[/{color}]"
-        console.print(f"  {status_fmt} {name}[dim]{detail_str}[/dim]")
+    Checks by container status, not by folder existence.
+    """
+    try:
+        # Check for any container with 'clawdbot' or 'openclaw' in name
+        result = subprocess.run(
+            ['docker', 'ps', '--format', '{{.Names}}'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode != 0:
+            return False
+        
+        containers = result.stdout.lower()
+        return 'clawdbot' in containers or 'openclaw' in containers
+    except Exception:
+        return False
 
 
-def _print_warning(msg: str):
-    """Print a warning message."""
-    if USE_PLAIN_MODE:
-        print(f"  [!] {msg}")
-    else:
-        console.print(f"  [yellow]! {msg}[/yellow]")
-
-
-def _print_info(msg: str):
-    """Print an info message."""
-    if USE_PLAIN_MODE:
-        print(f"      {msg}")
-    else:
-        console.print(f"      [dim]{msg}[/dim]")
-
-
-def _print_action(msg: str):
-    """Print an action/next step message."""
-    if USE_PLAIN_MODE:
-        print(f"  --> {msg}")
-    else:
-        console.print(f"  [cyan]--> {msg}[/cyan]")
-
-
-def run_doctor():
-    """Run environment checks."""
-    # Header
-    if USE_PLAIN_MODE:
-        print("")
-        print("=" * 50)
-        print("  SIMPLIFIA Doctor - Verificando seu ambiente...")
-        print("=" * 50)
-    else:
-        console.print()
-        console.print("[bold purple]SIMPLIFIA Doctor[/] - Verificando seu ambiente...")
-        console.print()
+def check_api_key_configured() -> tuple[bool, str]:
+    """Check if API key is configured.
     
-    checks = []
-    docker_installed = False
-    docker_running = False
-    clawdbot_running = False
+    Returns:
+        (configured, provider) - tuple
+    """
+    config_path = get_simplifia_path() / 'config.json'
+    if not config_path.exists():
+        return False, ""
     
-    # Check 1: Python version
-    py_version = f"{sys.version_info.major}.{sys.version_info.minor}"
-    py_ok = sys.version_info >= (3, 9)
-    checks.append(("Python >= 3.9", py_ok, f"v{py_version}"))
+    try:
+        config = json.loads(config_path.read_text())
+        provider = config.get('provider', '')
+        api_key = config.get('api_key', '')
+        
+        if api_key and len(api_key) > 10:
+            return True, provider
+        return False, provider
+    except Exception:
+        return False, ""
+
+
+def get_next_step(docker_installed: bool, docker_running: bool, 
+                  runtime_running: bool, api_key_ok: bool) -> str:
+    """Determine the recommended next step."""
     
-    # Check 2: Docker
-    docker_installed, docker_running = check_docker_available()
-    if docker_running:
-        checks.append(("Docker", True, "instalado e rodando"))
-        clawdbot_running = check_clawdbot_running()
-    elif docker_installed:
-        checks.append(("Docker", False, "instalado mas NAO esta rodando"))
-    else:
-        checks.append(("Docker", False, "nao instalado"))
+    if not docker_installed:
+        return "Instale o Docker Desktop: https://docker.com/products/docker-desktop"
     
-    # Check 3: Clawdbot runtime (only if Docker is running)
-    if docker_running:
-        if clawdbot_running:
-            checks.append(("Motor Clawdbot", True, "rodando"))
-        else:
-            checks.append(("Motor Clawdbot", False, "nao iniciado"))
+    if not docker_running:
+        return "Abra o Docker Desktop e aguarde 'Docker is running'"
     
-    # Check 4: SIMPLIFIA directory (create if missing)
+    if not runtime_running:
+        return "Execute: simplifia clawdbot start"
+    
+    if not api_key_ok:
+        return "Configure sua API key: simplifia setup"
+    
+    return "Instale um pack: simplifia install whatsapp"
+
+
+def run_doctor() -> tuple[bool, bool, bool, bool]:
+    """Run environment checks.
+    
+    Returns:
+        (all_ok, docker_installed, docker_running, runtime_running)
+    """
+    print_header("SIMPLIFIA Doctor")
+    
+    # Ensure simplifia directory exists
     simplifia_path = get_simplifia_path()
     if not simplifia_path.exists():
         simplifia_path.mkdir(parents=True, exist_ok=True)
         (simplifia_path / 'cache').mkdir(exist_ok=True)
-    checks.append(("Pasta SIMPLIFIA", simplifia_path.exists(), str(simplifia_path)))
     
-    # Check 5: Write permissions
-    can_write = os.access(simplifia_path, os.W_OK) if simplifia_path.exists() else False
-    checks.append(("Permissao de escrita", can_write, str(simplifia_path)))
+    # Check 1: SimplifIA installed (always true if running this)
+    print_ok("SimplifIA instalado")
     
-    # Check 6: curl available
-    has_curl = shutil.which('curl') is not None
-    checks.append(("curl disponivel", has_curl, "para downloads"))
-    
-    # Print results
-    print("")
-    all_ok = True
-    for name, ok, detail in checks:
-        _print_check(name, ok, detail)
-        if not ok:
-            all_ok = False
-    
-    print("")
-    
-    # Docker-specific messages (UX-focused)
-    automation_ready = docker_running and clawdbot_running
-    
-    if not docker_installed:
-        if USE_PLAIN_MODE:
-            print("  [OK] SimplifIA instalado.")
-            print("  [!] Automacao ainda nao ativada: Docker Desktop nao instalado.")
-            print("")
-            print("  --> Proximo passo:")
-            print("      1. Instale o Docker Desktop: https://docker.com/products/docker-desktop")
-            print("      2. Abra o Docker Desktop e aguarde 'Docker is running'")
-            print("      3. Execute: simplifia doctor")
-        else:
-            console.print("  [green][OK][/green] SimplifIA instalado.")
-            console.print("  [yellow][!] Automacao ainda nao ativada: Docker Desktop nao instalado.[/yellow]")
-            console.print()
-            console.print("  [cyan]--> Proximo passo:[/cyan]")
-            console.print("      1. Instale o Docker Desktop: https://docker.com/products/docker-desktop")
-            console.print("      2. Abra o Docker Desktop e aguarde 'Docker is running'")
-            console.print("      3. Execute: [bold]simplifia doctor[/bold]")
-        print("")
-        
-    elif not docker_running:
-        if USE_PLAIN_MODE:
-            print("  [OK] SimplifIA instalado.")
-            print("  [!] Automacao ainda nao ativada: Docker Desktop nao esta rodando.")
-            print("")
-            print("  --> Proximo passo:")
-            print("      1. Abra o Docker Desktop e aguarde 'Docker is running'")
-            print("      2. Execute: simplifia doctor")
-        else:
-            console.print("  [green][OK][/green] SimplifIA instalado.")
-            console.print("  [yellow][!] Automacao ainda nao ativada: Docker Desktop nao esta rodando.[/yellow]")
-            console.print()
-            console.print("  [cyan]--> Proximo passo:[/cyan]")
-            console.print("      1. Abra o Docker Desktop e aguarde 'Docker is running'")
-            console.print("      2. Execute: [bold]simplifia doctor[/bold]")
-        print("")
-        
-    elif not clawdbot_running:
-        if USE_PLAIN_MODE:
-            print("  [OK] SimplifIA instalado.")
-            print("  [OK] Docker rodando.")
-            print("  [!] Motor Clawdbot nao iniciado.")
-            print("")
-            print("  --> Execute: simplifia clawdbot start")
-        else:
-            console.print("  [green][OK][/green] SimplifIA instalado.")
-            console.print("  [green][OK][/green] Docker rodando.")
-            console.print("  [yellow][!] Motor Clawdbot nao iniciado.[/yellow]")
-            console.print()
-            console.print("  [cyan]--> Execute:[/cyan] [bold]simplifia clawdbot start[/bold]")
-        print("")
-    
-    # Final status
-    if automation_ready:
-        if USE_PLAIN_MODE:
-            print("  ============================================")
-            print("  [OK] Ambiente pronto!")
-            print("  ============================================")
-            print("")
-            print("  Para instalar o pack WhatsApp:")
-            print("      simplifia install whatsapp")
-        else:
-            console.print("  [green bold]==========================================")
-            console.print("  [OK] Ambiente pronto!")
-            console.print("  ==========================================[/green bold]")
-            console.print()
-            console.print("  Para instalar o pack WhatsApp:")
-            console.print("      [bold]simplifia install whatsapp[/bold]")
+    # Check 2: Docker installed
+    docker_installed = check_docker_installed()
+    if docker_installed:
+        print_ok("Docker instalado")
     else:
-        if USE_PLAIN_MODE:
-            print("  Dica: Se voce instalou Docker agora, feche e reabra o Terminal")
-            print("        e rode: simplifia doctor")
+        print_warn("Docker NAO instalado")
+    
+    # Check 3: Docker running
+    docker_running = False
+    if docker_installed:
+        docker_running = check_docker_running()
+        if docker_running:
+            print_ok("Docker rodando")
         else:
-            console.print("  [dim]Dica: Se voce instalou Docker agora, feche e reabra o Terminal[/dim]")
-            console.print("  [dim]      e rode: simplifia doctor[/dim]")
+            print_warn("Docker instalado, mas NAO esta rodando")
+    
+    # Check 4: Runtime (container status)
+    runtime_running = False
+    if docker_running:
+        runtime_running = check_runtime_running()
+        if runtime_running:
+            print_ok("Runtime rodando (container ativo)")
+        else:
+            print_warn("Runtime nao ativado")
+    else:
+        print_warn("Runtime nao ativado (faltou Docker)")
+    
+    # Check 5: API key
+    api_key_ok, provider = check_api_key_configured()
+    if api_key_ok:
+        print_ok(f"API key configurada ({provider})")
+    else:
+        print_warn("API key nao configurada (opcional agora)")
+    
+    # Determine overall status
+    all_ok = docker_installed and docker_running and runtime_running
+    
+    print_divider()
+    
+    # Next step recommendation
+    next_step = get_next_step(docker_installed, docker_running, runtime_running, api_key_ok)
+    print_next(f"Proximo passo recomendado: {next_step}")
+    
+    # Additional context messages
+    print("")
+    if not docker_installed:
+        print_info("Docker Desktop e gratuito para uso pessoal.")
+        print_info("Baixe em: https://docker.com/products/docker-desktop")
+    elif not docker_running:
+        print_info("Abra o Docker Desktop no menu Iniciar.")
+        print_info("Aguarde aparecer 'Docker is running' na barra de tarefas.")
+        print_info("Depois execute: simplifia doctor")
+    elif not runtime_running:
+        print_info("O runtime e o motor que executa suas automacoes.")
+        print_info("Execute: simplifia clawdbot start")
+    elif not api_key_ok:
+        print_info("A IA (ChatGPT/Claude) e paga a parte - voce usa sua propria API key.")
+        print_info("Configure com: simplifia setup")
+        print_info("Ou pule por enquanto e configure depois.")
+    else:
+        print_info("Ambiente pronto! Instale um pack para comecar.")
     
     print("")
+    print_info("Lembrete: A IA (OpenAI/Claude) e paga a parte pelo provedor.")
+    print_info("Voce controla seus gastos diretamente na conta deles.")
+    print("")
     
-    return all_ok, docker_installed, docker_running, clawdbot_running
+    return all_ok, docker_installed, docker_running, runtime_running
