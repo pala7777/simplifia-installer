@@ -145,19 +145,46 @@ if ($upgradeFlag -or -not $existingVersion) {
 }
 
 # Add Scripts to PATH if needed
-$userScripts = "$env:APPDATA\Python\Python*\Scripts"
-$scriptsPath = (Get-ChildItem $userScripts -ErrorAction SilentlyContinue | Select-Object -First 1)?.FullName
-
-if ($scriptsPath -and -not ($env:PATH -split ';' | Where-Object { $_ -like "*Python*Scripts*" })) {
-    $env:PATH = "$env:PATH;$scriptsPath"
-    Write-Warning "Adicionando $scriptsPath ao PATH"
-    
-    # Persist to user PATH
-    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-    if (-not ($userPath -split ';' | Where-Object { $_ -like "*Python*Scripts*" })) {
-        [Environment]::SetEnvironmentVariable("PATH", "$userPath;$scriptsPath", "User")
-        Write-Success "PATH atualizado permanentemente"
+# Get user scripts path from Python
+$scriptsPath = $null
+try {
+    $userBase = (python -c "import site; print(site.USER_BASE)" 2>&1).Trim()
+    if ($userBase -and (Test-Path $userBase)) {
+        $scriptsPath = Join-Path $userBase "Scripts"
     }
+} catch {}
+
+# Fallback to common locations
+if (-not $scriptsPath -or -not (Test-Path $scriptsPath -ErrorAction SilentlyContinue)) {
+    $fallbackPaths = @(
+        "$env:APPDATA\Python\Python312\Scripts",
+        "$env:APPDATA\Python\Python311\Scripts",
+        "$env:APPDATA\Python\Python310\Scripts",
+        "$env:LOCALAPPDATA\Programs\Python\Python312\Scripts",
+        "$env:LOCALAPPDATA\Programs\Python\Python311\Scripts"
+    )
+    foreach ($path in $fallbackPaths) {
+        if (Test-Path $path -ErrorAction SilentlyContinue) {
+            $scriptsPath = $path
+            break
+        }
+    }
+}
+
+if ($scriptsPath -and (Test-Path $scriptsPath -ErrorAction SilentlyContinue)) {
+    if (-not ($env:PATH -split ';' | Where-Object { $_ -eq $scriptsPath })) {
+        $env:PATH = "$scriptsPath;$env:PATH"
+        Write-Warning "Adicionando $scriptsPath ao PATH"
+        
+        # Persist to user PATH
+        $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+        if (-not ($userPath -split ';' | Where-Object { $_ -eq $scriptsPath })) {
+            [Environment]::SetEnvironmentVariable("PATH", "$scriptsPath;$userPath", "User")
+            Write-Success "PATH atualizado permanentemente"
+        }
+    }
+} else {
+    Write-Warning "Scripts path não encontrado - pode ser necessário reiniciar o terminal"
 }
 
 # Verify installation
