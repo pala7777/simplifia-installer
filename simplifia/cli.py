@@ -96,10 +96,49 @@ def list_available():
 
 @app.command()
 def activate(
+    token: str = typer.Argument(..., help="Token do Telegram (/ativar CODE)"),
+    fingerprint: str = typer.Option(None, "--fingerprint", help="Device fingerprint override"),
+):
+    """Ativa SimplifIA nesta maquina usando token do Telegram."""
+    from rich.console import Console
+    from rich.table import Table
+    from .auth import save_auth
+    from .api import activate_token, default_fingerprint, ApiError
+    
+    console = Console()
+    
+    try:
+        fp = fingerprint or default_fingerprint()
+        resp = activate_token(token=token, device_fingerprint=fp)
+        
+        save_auth(
+            session_token=resp.session_token,
+            entitlements=resp.entitlements,
+            product=resp.product,
+            niche=resp.niche,
+        )
+        
+        table = Table(title="SimplifIA Ativado ✅")
+        table.add_column("Campo")
+        table.add_column("Valor")
+        table.add_row("Produto", str(resp.product or "-"))
+        table.add_row("Nicho", str(resp.niche or "-"))
+        table.add_row("Packs", ", ".join(resp.entitlements) if resp.entitlements else "(nenhum)")
+        console.print(table)
+        console.print("\n  Proximo: [bold]simplifia install <pack>[/bold]")
+        
+    except ApiError as e:
+        console.print(f"[red]Erro de ativacao:[/red] {e}")
+        console.print("\nPegue um token no Telegram: https://t.me/SimplifIABot → /ativar CODIGO")
+        raise typer.Exit(code=1)
+
+
+@app.command("activate-code")
+def activate_code(
     code: str = typer.Argument(None, help="Codigo de ativacao"),
     email: str = typer.Option("", "--email", "-e", help="Email (opcional)"),
 ):
-    """Ativa uma licenca (codigo de compra)."""
+    """Ativa via codigo (metodo antigo, use 'activate' com token do Telegram)."""
     from .license import run_activate
     run_activate(code or "", email)
 

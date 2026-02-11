@@ -1,0 +1,118 @@
+"""SimplifIA CLI - API client."""
+from __future__ import annotations
+
+import os
+import platform
+import uuid
+from dataclasses import dataclass
+from typing import Any, Optional
+
+import httpx
+
+DEFAULT_API_BASE = "https://simplifia.com.br/api/v1"
+
+
+def api_base() -> str:
+    return os.getenv("SIMPLIFIA_API_BASE", DEFAULT_API_BASE).rstrip("/")
+
+
+def default_fingerprint() -> str:
+    """Generate minimal, non-invasive device fingerprint."""
+    node = uuid.getnode()
+    return f"{platform.system()}-{platform.release()}-{node}"
+
+
+@dataclass
+class ActivateResponse:
+    """Response from token activation."""
+    entitlements: list[str]
+    session_token: str
+    product: Optional[str] = None
+    niche: Optional[str] = None
+
+
+class ApiError(RuntimeError):
+    """API call failed."""
+    pass
+
+
+def activate_token(
+    token: str,
+    device_fingerprint: Optional[str] = None,
+    timeout_s: float = 20.0
+) -> ActivateResponse:
+    """
+    Exchange a Telegram token for a session token.
+    
+    Args:
+        token: The activation token from Telegram bot
+        device_fingerprint: Optional device fingerprint
+        timeout_s: Request timeout in seconds
+        
+    Returns:
+        ActivateResponse with session_token
+        
+    Raises:
+        ApiError: If activation fails
+    """
+    url = f"{api_base()}/cli/activate-token"
+    body: dict[str, Any] = {"token": token}
+    
+    if device_fingerprint:
+        body["device_fingerprint"] = device_fingerprint
+    
+    with httpx.Client(timeout=timeout_s) as client:
+        r = client.post(url, json=body, headers={"Content-Type": "application/json"})
+        
+        if r.status_code >= 400:
+            # Try to get error message from response
+            try:
+                data = r.json()
+                msg = data.get("error", f"HTTP {r.status_code}")
+            except Exception:
+                msg = f"HTTP {r.status_code}"
+            raise ApiError(f"Activation failed: {msg}")
+        
+        data = r.json()
+        
+        if not data.get("ok"):
+            raise ApiError(data.get("error", "Activation failed"))
+        
+        st = data.get("session_token")
+        if not st:
+            raise ApiError("Activation failed: missing session_token")
+        
+        return ActivateResponse(
+            entitlements=list(data.get("entitlements") or []),
+            session_token=st,
+            product=data.get("product"),
+            niche=data.get("niche"),
+        )
+
+
+def get_manifest(session_token: str, timeout_s: float = 20.0) -> dict[str, Any]:
+    """
+    Fetch the pack manifest for the authenticated user.
+    
+    Args:
+        session_token: JWT session token
+        timeout_s: Request timeout in seconds
+        
+    Returns:
+        Manifest data with entitlements and packs
+        
+    Raises:
+        ApiError: If request fails (UNAUTHORIZED for 401/403)
+    """
+    url = f"{api_base()}/cli/manifest"
+    
+    with httpx.Client(timeout=timeout_s) as client:
+        r = client.get(url, headers={"Authorization": f"Bearer {session_token}"})
+        
+        if r.status_code in (401, 403):
+            raise ApiError("UNAUTHORIZED")
+        
+        if r.status_code >= 400:
+            raise ApiError(f"Manifest failed ({r.status_code})")
+        
+        return r.json()

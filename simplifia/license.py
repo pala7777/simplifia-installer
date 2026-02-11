@@ -211,15 +211,64 @@ def check_entitlement_or_exit(pack_id: str) -> bool:
     """Check entitlement for a pack, print message and return False if not entitled.
     
     Use this before installing a pack.
+    Checks both new token-based auth and legacy license system.
     """
+    # First, check new token-based auth (from Telegram)
+    try:
+        from .auth import load_auth
+        from .api import get_manifest, ApiError
+        
+        auth = load_auth()
+        if auth and auth.session_token:
+            try:
+                # Check with server
+                manifest = get_manifest(auth.session_token)
+                entitlements = manifest.get("entitlements", [])
+                
+                # Base is always allowed
+                if pack_id == 'base':
+                    return True
+                
+                if pack_id in entitlements or 'all' in entitlements:
+                    return True
+                
+                # Not entitled via token auth
+                print_error(f"Voce nao tem acesso ao pack '{pack_id}'.")
+                print("")
+                print_info("Seus packs liberados: " + ", ".join(entitlements))
+                print_info("Compre mais em: https://simplifia.com.br/comprar")
+                print("")
+                return False
+                
+            except ApiError as e:
+                if "UNAUTHORIZED" in str(e):
+                    # Session expired - prompt re-auth
+                    print_error("Sessao expirada.")
+                    print("")
+                    print_info("Renove seu token via Telegram:")
+                    print("      1. Abra @SimplifIABot no Telegram")
+                    print("      2. Envie /instalar")
+                    print("      3. Copie o novo token")
+                    print("      4. Execute: simplifia activate <TOKEN>")
+                    print("")
+                    return False
+                # Other API error - fall through to legacy check
+                pass
+                
+    except Exception:
+        # If new auth fails, fall through to legacy check
+        pass
+    
+    # Legacy check (old license.json system)
     if is_pack_entitled(pack_id):
         return True
     
     print_error(f"Voce nao tem acesso ao pack '{pack_id}'.")
     print("")
     print_info("Para liberar este pack:")
-    print("      1. Compre em: https://simplifia.vercel.app/comprar")
-    print("      2. Ative o codigo: simplifia activate <codigo>")
+    print("      1. Compre em: https://simplifia.com.br/comprar")
+    print("      2. Ative via Telegram: @SimplifIABot")
+    print("      3. Execute: simplifia activate <TOKEN>")
     print("")
     
     return False
