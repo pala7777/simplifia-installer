@@ -6,6 +6,11 @@
 # Fallback: pip install if exe download fails
 # ============================================================
 
+# Fix encoding for Portuguese characters
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+chcp 65001 | Out-Null
+
 $ErrorActionPreference = "Stop"
 
 # ============================================================
@@ -350,4 +355,7 @@ Write-Host "    (OpenAI, Anthropic, etc). Você controla seus gastos." -Foregrou
 Write-Host ""
 Write-Host "  📚 Ajuda: https://simplifia.com.br/downloads" -ForegroundColor Blue
 Write-Host "  💬 Telegram: https://t.me/simplifia" -ForegroundColor Blue
+Write-Host ""
+Write-Host "  🛡️ Antivirus bloqueou? E normal para .exe novos." -ForegroundColor DarkGray
+Write-Host "     Clique 'Mais opcoes' > 'Permitir' no seu antivirus." -ForegroundColor DarkGray
 Write-Host ""
