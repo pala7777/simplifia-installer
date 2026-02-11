@@ -278,30 +278,40 @@ if ($installRuntime) {
     }
     
     Write-Step "Iniciando runtime..."
-    simplifia clawdbot start
-    
-    # Health check
-    Write-Step "Verificando health..."
-    $healthOk = $false
-    
-    for ($i = 1; $i -le 30; $i++) {
-        $running = (docker ps --filter "name=simplifia-clawdbot" --filter "status=running" --format "{{.Names}}" 2>&1) -match "simplifia-clawdbot"
-        
-        if ($running) {
-            $healthOk = $true
-            break
-        }
-        
-        Start-Sleep -Seconds 1
-        Write-Host "." -NoNewline
+    $runtimeStarted = $false
+    try {
+        simplifia clawdbot start 2>&1 | Out-Null
+        $runtimeStarted = $true
+    } catch {
+        Write-Warning "Não foi possível iniciar o runtime agora."
+        Write-Host "  A imagem Docker será baixada no primeiro uso." -ForegroundColor Yellow
+        Write-Host "  Ou inicie manualmente: simplifia clawdbot start" -ForegroundColor Cyan
     }
-    Write-Host ""
     
-    if ($healthOk) {
-        Write-Success "Runtime iniciado e saudável!"
-    } else {
-        Write-Warning "Runtime iniciado mas health check pendente"
-        Write-Host "  Ver logs: simplifia clawdbot logs" -ForegroundColor Cyan
+    # Health check (only if started)
+    if ($runtimeStarted) {
+        Write-Step "Verificando health..."
+        $healthOk = $false
+        
+        for ($i = 1; $i -le 30; $i++) {
+            $running = (docker ps --filter "name=simplifia-clawdbot" --filter "status=running" --format "{{.Names}}" 2>&1) -match "simplifia-clawdbot"
+            
+            if ($running) {
+                $healthOk = $true
+                break
+            }
+            
+            Start-Sleep -Seconds 1
+            Write-Host "." -NoNewline
+        }
+        Write-Host ""
+        
+        if ($healthOk) {
+            Write-Success "Runtime iniciado e saudável!"
+        } else {
+            Write-Warning "Runtime iniciado mas health check pendente"
+            Write-Host "  Ver logs: simplifia clawdbot logs" -ForegroundColor Cyan
+        }
     }
 }
 

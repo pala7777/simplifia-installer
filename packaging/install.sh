@@ -314,30 +314,39 @@ if [ "$INSTALL_RUNTIME" = true ]; then
     fi
     
     print_step "Iniciando runtime..."
-    simplifia clawdbot start
-    
-    # Health check
-    print_step "Verificando health..."
-    HEALTH_OK=false
-    for i in {1..30}; do
-        if docker ps --filter "name=simplifia-clawdbot" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "simplifia-clawdbot"; then
-            # Check if healthy
-            HEALTH=$(docker inspect --format='{{.State.Health.Status}}' simplifia-clawdbot 2>/dev/null || echo "none")
-            if [ "$HEALTH" = "healthy" ] || [ "$HEALTH" = "none" ]; then
-                HEALTH_OK=true
-                break
-            fi
-        fi
-        sleep 1
-        echo -n "."
-    done
-    echo ""
-    
-    if [ "$HEALTH_OK" = true ]; then
-        print_success "Runtime iniciado e saudável!"
+    if simplifia clawdbot start 2>/dev/null; then
+        RUNTIME_STARTED=true
     else
-        print_warning "Runtime iniciado mas health check pendente"
-        echo "  Ver logs: ${BOLD}simplifia clawdbot logs${NC}"
+        RUNTIME_STARTED=false
+        print_warning "Não foi possível iniciar o runtime agora."
+        echo "  A imagem Docker será baixada no primeiro uso."
+        echo "  Ou inicie manualmente: ${BOLD}simplifia clawdbot start${NC}"
+    fi
+    
+    # Health check (only if started)
+    if [ "$RUNTIME_STARTED" = true ]; then
+        print_step "Verificando health..."
+        HEALTH_OK=false
+        for i in {1..30}; do
+            if docker ps --filter "name=simplifia-clawdbot" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "simplifia-clawdbot"; then
+                # Check if healthy
+                HEALTH=$(docker inspect --format='{{.State.Health.Status}}' simplifia-clawdbot 2>/dev/null || echo "none")
+                if [ "$HEALTH" = "healthy" ] || [ "$HEALTH" = "none" ]; then
+                    HEALTH_OK=true
+                    break
+                fi
+            fi
+            sleep 1
+            echo -n "."
+        done
+        echo ""
+        
+        if [ "$HEALTH_OK" = true ]; then
+            print_success "Runtime iniciado e saudável!"
+        else
+            print_warning "Runtime iniciado mas health check pendente"
+            echo "  Ver logs: ${BOLD}simplifia clawdbot logs${NC}"
+        fi
     fi
 fi
 
