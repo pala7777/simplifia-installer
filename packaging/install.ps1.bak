@@ -29,7 +29,7 @@ $SIMPLIFIA_EXE_PATH = "$SIMPLIFIA_BIN_DIR\simplifia.exe"
 function Write-Header {
     Write-Host ""
     Write-Host "⚡ SIMPLIFIA Installer" -ForegroundColor Magenta
-    Write-Host "   Automacao sem codigo em 1 comando" -ForegroundColor Cyan
+    Write-Host "   Automação sem código em 1 comando" -ForegroundColor Cyan
     Write-Host ""
 }
 
@@ -127,7 +127,7 @@ try {
         throw "Executable test failed"
     }
 } catch {
-    Write-Warning "Download do executavel falhou. Tentando metodo alternativo..."
+    Write-Warning "Download do executável falhou. Tentando método alternativo..."
     
     # Remove failed download
     if (Test-Path $SIMPLIFIA_EXE_PATH) {
@@ -140,7 +140,7 @@ try {
 # ============================================================
 
 if (-not $exeDownloaded) {
-    Write-Step "Usando instalacao via Python..."
+    Write-Step "Usando instalação via Python..."
     
     # Check Python
     $pythonAvailable = $false
@@ -159,7 +159,7 @@ if (-not $exeDownloaded) {
     
     # Offer to install Python via winget
     if (-not $pythonAvailable) {
-        Write-Warning "Python nao encontrado!"
+        Write-Warning "Python não encontrado!"
         
         $wingetAvailable = $false
         try {
@@ -184,20 +184,20 @@ if (-not $exeDownloaded) {
                     $pythonAvailable = $true
                     Write-Success "Python instalado!"
                 } catch {
-                    Write-Error "Instalacao do Python falhou."
+                    Write-Error "Instalação do Python falhou."
                     Write-Host "  Instale manualmente: https://python.org/downloads/" -ForegroundColor Yellow
                     exit 1
                 }
             } else {
                 Write-Host ""
                 Write-Host "  Instale o Python manualmente: https://python.org/downloads/" -ForegroundColor Yellow
-                Write-Host "  (Marque 'Add Python to PATH' durante instalacao)" -ForegroundColor Yellow
+                Write-Host "  (Marque 'Add Python to PATH' durante instalação)" -ForegroundColor Yellow
                 exit 1
             }
         } else {
             Write-Host ""
             Write-Host "  Instale o Python: https://python.org/downloads/" -ForegroundColor Yellow
-            Write-Host "  (Marque 'Add Python to PATH' durante instalacao)" -ForegroundColor Yellow
+            Write-Host "  (Marque 'Add Python to PATH' durante instalação)" -ForegroundColor Yellow
             exit 1
         }
     }
@@ -228,7 +228,7 @@ if (-not $exeDownloaded) {
             }
         }
     } catch {
-        Write-Error "Instalacao falhou: $_"
+        Write-Error "Instalação falhou: $_"
         exit 1
     }
 }
@@ -244,7 +244,7 @@ $pathAdded = Add-ToPath $SIMPLIFIA_BIN_DIR
 if ($pathAdded) {
     Write-Success "PATH atualizado permanentemente"
 } else {
-    Write-Success "PATH ja configurado"
+    Write-Success "PATH já configurado"
 }
 
 # ============================================================
@@ -252,7 +252,7 @@ if ($pathAdded) {
 # ============================================================
 
 Write-Host ""
-Write-Step "Configuracao inicial..."
+Write-Step "Configuração inicial..."
 
 $configPath = "$env:USERPROFILE\.simplifia\config.json"
 
@@ -263,7 +263,7 @@ if (-not (Test-Path $configPath)) {
         & $SIMPLIFIA_EXE_PATH setup
     }
 } else {
-    Write-Success "Configuracao existente mantida"
+    Write-Success "Configuração existente mantida"
 }
 
 # ============================================================
@@ -280,21 +280,21 @@ $dockerImage = "ghcr.io/pala7777/simplifia-clawdbot:latest"
 try {
     docker info 2>&1 | Out-Null
     $dockerAvailable = $true
-    Write-Success "Docker disponivel"
+    Write-Success "Docker disponível"
     
     # Check if image exists
     $manifestCheck = docker manifest inspect $dockerImage 2>&1
     if ($LASTEXITCODE -eq 0) {
         $imageExists = $true
-        Write-Success "Imagem Docker disponivel"
+        Write-Success "Imagem Docker disponível"
     }
 } catch {
-    Write-Warning "Docker nao disponivel"
+    Write-Warning "Docker não disponível"
 }
 
 if ($dockerAvailable -and $imageExists) {
     Write-Host ""
-    Write-Host "O motor OpenClaw/Clawdbot e necessario para rodar automacoes." -ForegroundColor Cyan
+    Write-Host "O motor OpenClaw/Clawdbot é necessário para rodar automações." -ForegroundColor Cyan
     
     if (Ask-YesNo "Instalar o runtime agora? (recomendado)" "y") {
         Write-Step "Instalando runtime..."
@@ -303,7 +303,7 @@ if ($dockerAvailable -and $imageExists) {
     }
 } elseif (-not $dockerAvailable) {
     Write-Host ""
-    Write-Host "  💡 Para rodar automacoes, instale o Docker Desktop:" -ForegroundColor Yellow
+    Write-Host "  💡 Para rodar automações, instale o Docker Desktop:" -ForegroundColor Yellow
     Write-Host "     https://docker.com/products/docker-desktop" -ForegroundColor Cyan
 }
 
@@ -313,7 +313,7 @@ if ($dockerAvailable -and $imageExists) {
 
 Write-Host ""
 Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Green
-Write-Host "  Verificacao Final" -ForegroundColor Green
+Write-Host "  Verificação Final" -ForegroundColor Green
 Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Green
 Write-Host ""
 
@@ -323,7 +323,7 @@ try {
     $versionOutput = & $SIMPLIFIA_EXE_PATH --version 2>&1
     Write-Host "  $versionOutput" -ForegroundColor Green
 } catch {
-    Write-Error "FALHA: simplifia --version nao funciona"
+    Write-Error "FALHA: simplifia --version não funciona"
     exit 1
 }
 
@@ -341,17 +341,17 @@ Write-Host "══════════════════════�
 Write-Host "  ✅ SIMPLIFIA instalado com sucesso!" -ForegroundColor Green
 Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Proximo passo:" -ForegroundColor White
+Write-Host "  Próximo passo:" -ForegroundColor White
 Write-Host ""
 Write-Host "    simplifia install whatsapp" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Outros comandos:" -ForegroundColor White
-Write-Host "    simplifia list        → Ver packs disponiveis" -ForegroundColor DarkGray
+Write-Host "    simplifia list        → Ver packs disponíveis" -ForegroundColor DarkGray
 Write-Host "    simplifia doctor      → Verificar ambiente" -ForegroundColor DarkGray
 Write-Host "    simplifia --help      → Ajuda completa" -ForegroundColor DarkGray
 Write-Host ""
-Write-Host "  ⚠ Lembrete: A IA (LLM) e paga a parte pelo provedor" -ForegroundColor Yellow
-Write-Host "    (OpenAI, Anthropic, etc). Voce controla seus gastos." -ForegroundColor Yellow
+Write-Host "  ⚠ Lembrete: A IA (LLM) é paga à parte pelo provedor" -ForegroundColor Yellow
+Write-Host "    (OpenAI, Anthropic, etc). Você controla seus gastos." -ForegroundColor Yellow
 Write-Host ""
 Write-Host "  📚 Ajuda: https://simplifia.com.br/downloads" -ForegroundColor Blue
 Write-Host "  💬 Telegram: https://t.me/simplifia" -ForegroundColor Blue
