@@ -132,15 +132,26 @@ try {
 
 # Install/upgrade
 if ($upgradeFlag -or -not $existingVersion) {
-    try {
-        pip install --user $upgradeFlag simplifia 2>&1 | Out-Null
-    } catch {
-        try {
-            pip install --user $upgradeFlag git+https://github.com/pala7777/simplifia-installer.git 2>&1 | Out-Null
-        } catch {
-            Write-Error "Falha na instalação"
-            exit 1
+    # Try PyPI first, then GitHub
+    $installed = $false
+    
+    # Try PyPI
+    pip install --user $upgradeFlag simplifia 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        $installed = $true
+    }
+    
+    # If PyPI failed, try GitHub
+    if (-not $installed) {
+        pip install --user $upgradeFlag git+https://github.com/pala7777/simplifia-installer.git 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $installed = $true
         }
+    }
+    
+    if (-not $installed) {
+        Write-Error "Falha na instalação"
+        exit 1
     }
 }
 
