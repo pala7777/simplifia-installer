@@ -114,30 +114,40 @@ jobs:
       - name: Add Python Scripts to PATH
         shell: pwsh
         run: |
-          # Use Python's site.USER_BASE for reliable --user install location
+          # Get Python version for versioned Scripts path
+          $pyVersion = (python -c "import sys; print(f'{sys.version_info.major}{sys.version_info.minor}')").Trim()
           $userBase = (python -c "import site; print(site.USER_BASE)").Trim()
-          Write-Host "Python USER_BASE: $userBase"
+          Write-Host "Python version: $pyVersion, USER_BASE: $userBase"
           
-          $scriptsPath = Join-Path $userBase "Scripts"
-          Write-Host "Scripts path: $scriptsPath"
-          
-          # Also check system Scripts as fallback
+          # Windows pip --user installs to Python<VERSION>\Scripts, not just Scripts
+          $versionedScripts = Join-Path $userBase "Python$pyVersion\Scripts"
+          $plainScripts = Join-Path $userBase "Scripts"
           $systemScripts = (python -c "import sys; print(sys.prefix)").Trim() + "\Scripts"
-          Write-Host "System Scripts: $systemScripts"
           
-          # Try USER_BASE\Scripts first (for --user installs)
-          if (Test-Path "$scriptsPath\simplifia.exe" -ErrorAction SilentlyContinue) {
-            Write-Host "Found simplifia.exe at USER_BASE Scripts"
-            Add-Content -Path $env:GITHUB_PATH -Value $scriptsPath
+          Write-Host "Checking paths:"
+          Write-Host "  Versioned: $versionedScripts"
+          Write-Host "  Plain: $plainScripts"
+          Write-Host "  System: $systemScripts"
+          
+          # Try versioned path first (Python312\Scripts)
+          if (Test-Path "$versionedScripts\simplifia.exe" -ErrorAction SilentlyContinue) {
+            Write-Host "Found simplifia.exe at versioned Scripts"
+            Add-Content -Path $env:GITHUB_PATH -Value $versionedScripts
           }
-          # Then try system Scripts (for non-user installs)
+          # Then plain USER_BASE\Scripts
+          elseif (Test-Path "$plainScripts\simplifia.exe" -ErrorAction SilentlyContinue) {
+            Write-Host "Found simplifia.exe at plain Scripts"
+            Add-Content -Path $env:GITHUB_PATH -Value $plainScripts
+          }
+          # Then system Scripts
           elseif (Test-Path "$systemScripts\simplifia.exe" -ErrorAction SilentlyContinue) {
             Write-Host "Found simplifia.exe at system Scripts"
             Add-Content -Path $env:GITHUB_PATH -Value $systemScripts
           }
           else {
-            Write-Host "simplifia.exe not found in expected locations, adding both to PATH"
-            Add-Content -Path $env:GITHUB_PATH -Value $scriptsPath
+            Write-Host "simplifia.exe not found in expected locations, adding all to PATH"
+            Add-Content -Path $env:GITHUB_PATH -Value $versionedScripts
+            Add-Content -Path $env:GITHUB_PATH -Value $plainScripts
             Add-Content -Path $env:GITHUB_PATH -Value $systemScripts
           }
           
