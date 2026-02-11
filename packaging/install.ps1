@@ -6,51 +6,53 @@
 # Fallback: pip install if exe download fails
 # ============================================================
 
-# Fix encoding for Portuguese characters
+# Robust UTF-8 encoding setup for Windows
+$ErrorActionPreference = "SilentlyContinue"
+chcp 65001 | Out-Null
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
-chcp 65001 | Out-Null
-
 $ErrorActionPreference = "Stop"
 
 # ============================================================
 # CONFIG
 # ============================================================
 
-$SIMPLIFIA_VERSION = "v1.0.2"
+$SIMPLIFIA_VERSION = "v1.0.3"
 $SIMPLIFIA_BIN_DIR = "$env:USERPROFILE\.simplifia\bin"
 $SIMPLIFIA_EXE_URL = "https://github.com/pala7777/simplifia-installer/releases/download/$SIMPLIFIA_VERSION/simplifia-windows.exe"
 $SIMPLIFIA_EXE_PATH = "$SIMPLIFIA_BIN_DIR\simplifia.exe"
 
 # ============================================================
-# HELPERS
+# HELPERS (ASCII-safe - no fancy Unicode)
 # ============================================================
 
 function Write-Header {
     Write-Host ""
-    Write-Host "⚡ SIMPLIFIA Installer" -ForegroundColor Magenta
-    Write-Host "   Automacao sem codigo em 1 comando" -ForegroundColor Cyan
+    Write-Host "============================================" -ForegroundColor Magenta
+    Write-Host "  SIMPLIFIA Installer" -ForegroundColor Magenta
+    Write-Host "  Automacao sem codigo em 1 comando" -ForegroundColor Cyan
+    Write-Host "============================================" -ForegroundColor Magenta
     Write-Host ""
 }
 
 function Write-Step {
     param([string]$Message)
-    Write-Host "▶ $Message" -ForegroundColor Blue
+    Write-Host "[>] $Message" -ForegroundColor Blue
 }
 
 function Write-Success {
     param([string]$Message)
-    Write-Host "✓ $Message" -ForegroundColor Green
+    Write-Host "[OK] $Message" -ForegroundColor Green
 }
 
 function Write-Warning {
     param([string]$Message)
-    Write-Host "⚠ $Message" -ForegroundColor Yellow
+    Write-Host "[!] $Message" -ForegroundColor Yellow
 }
 
 function Write-Error {
     param([string]$Message)
-    Write-Host "✗ $Message" -ForegroundColor Red
+    Write-Host "[X] $Message" -ForegroundColor Red
 }
 
 function Ask-YesNo {
@@ -267,57 +269,63 @@ if (-not (Test-Path $configPath)) {
 }
 
 # ============================================================
-# STEP 5: Runtime (Docker) - if available
+# STEP 5: Check Docker status
 # ============================================================
 
 Write-Host ""
-Write-Step "Verificando runtime Docker..."
+Write-Step "Verificando Docker..."
 
-$dockerAvailable = $false
-$imageExists = $false
-$dockerImage = "ghcr.io/pala7777/simplifia-clawdbot:latest"
+$dockerInstalled = $false
+$dockerRunning = $false
 
 try {
-    docker info 2>&1 | Out-Null
-    $dockerAvailable = $true
-    Write-Success "Docker disponivel"
-    
-    # Check if image exists
-    $manifestCheck = docker manifest inspect $dockerImage 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        $imageExists = $true
-        Write-Success "Imagem Docker disponivel"
+    $dockerPath = Get-Command docker -ErrorAction SilentlyContinue
+    if ($dockerPath) {
+        $dockerInstalled = $true
+        Write-Success "Docker instalado"
+        
+        # Check if running
+        $dockerInfo = docker info 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            $dockerRunning = $true
+            Write-Success "Docker rodando"
+        } else {
+            Write-Warning "Docker instalado mas NAO esta rodando"
+        }
+    } else {
+        Write-Warning "Docker nao instalado"
     }
 } catch {
     Write-Warning "Docker nao disponivel"
 }
 
-if ($dockerAvailable -and $imageExists) {
+# ============================================================
+# STEP 6: Install runtime if Docker is running
+# ============================================================
+
+if ($dockerRunning) {
     Write-Host ""
-    Write-Host "O motor OpenClaw/Clawdbot e necessario para rodar automacoes." -ForegroundColor Cyan
+    Write-Host "  Docker detectado e rodando!" -ForegroundColor Green
     
-    if (Ask-YesNo "Instalar o runtime agora? (recomendado)" "y") {
-        Write-Step "Instalando runtime..."
-        & $SIMPLIFIA_EXE_PATH clawdbot install --docker
-        & $SIMPLIFIA_EXE_PATH clawdbot start
+    if (Ask-YesNo "Instalar o motor de automacao agora? (recomendado)" "y") {
+        Write-Step "Instalando motor Clawdbot..."
+        & $SIMPLIFIA_EXE_PATH clawdbot install --docker 2>&1
+        & $SIMPLIFIA_EXE_PATH clawdbot start 2>&1
+        Write-Success "Motor instalado e iniciado!"
     }
-} elseif (-not $dockerAvailable) {
-    Write-Host ""
-    Write-Host "  💡 Para rodar automacoes, instale o Docker Desktop:" -ForegroundColor Yellow
-    Write-Host "     https://docker.com/products/docker-desktop" -ForegroundColor Cyan
 }
 
 # ============================================================
-# STEP 6: Success check (REQUIRED)
+# STEP 7: Final verification
 # ============================================================
 
 Write-Host ""
-Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Green
+Write-Host "============================================" -ForegroundColor Green
 Write-Host "  Verificacao Final" -ForegroundColor Green
-Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Green
+Write-Host "============================================" -ForegroundColor Green
 Write-Host ""
 
-# Test 1: Version
+# Test: Version
 Write-Step "Testando simplifia --version..."
 try {
     $versionOutput = & $SIMPLIFIA_EXE_PATH --version 2>&1
@@ -327,9 +335,10 @@ try {
     exit 1
 }
 
-# Test 2: Doctor
+# Test: Doctor
 Write-Host ""
-Write-Step "Testando simplifia doctor..."
+Write-Step "Executando simplifia doctor..."
+Write-Host ""
 & $SIMPLIFIA_EXE_PATH doctor
 
 # ============================================================
@@ -337,25 +346,49 @@ Write-Step "Testando simplifia doctor..."
 # ============================================================
 
 Write-Host ""
-Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Green
-Write-Host "  ✅ SIMPLIFIA instalado com sucesso!" -ForegroundColor Green
-Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Green
+Write-Host "============================================" -ForegroundColor Green
+Write-Host "  [OK] SIMPLIFIA instalado com sucesso!" -ForegroundColor Green
+Write-Host "============================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Proximo passo:" -ForegroundColor White
+
+# Docker-specific final message
+if (-not $dockerInstalled) {
+    Write-Host "  [!] Automacao ainda nao ativada: Docker Desktop nao instalado." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  --> Proximo passo:" -ForegroundColor Cyan
+    Write-Host "      1. Instale Docker Desktop: https://docker.com/products/docker-desktop" -ForegroundColor White
+    Write-Host "      2. Abra o Docker Desktop e aguarde 'Docker is running'" -ForegroundColor White
+    Write-Host "      3. Feche e reabra o Terminal" -ForegroundColor White
+    Write-Host "      4. Execute: simplifia doctor" -ForegroundColor White
+    Write-Host ""
+} elseif (-not $dockerRunning) {
+    Write-Host "  [!] Automacao ainda nao ativada: Docker Desktop nao esta rodando." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  --> Proximo passo:" -ForegroundColor Cyan
+    Write-Host "      1. Abra o Docker Desktop e aguarde 'Docker is running'" -ForegroundColor White
+    Write-Host "      2. Execute: simplifia doctor" -ForegroundColor White
+    Write-Host ""
+} else {
+    Write-Host "  Para instalar o pack WhatsApp:" -ForegroundColor White
+    Write-Host ""
+    Write-Host "      simplifia install whatsapp" -ForegroundColor Cyan
+    Write-Host ""
+}
+
+Write-Host "  Comandos uteis:" -ForegroundColor White
+Write-Host "      simplifia list        - Ver packs disponiveis" -ForegroundColor DarkGray
+Write-Host "      simplifia doctor      - Verificar ambiente" -ForegroundColor DarkGray
+Write-Host "      simplifia --help      - Ajuda completa" -ForegroundColor DarkGray
 Write-Host ""
-Write-Host "    simplifia install whatsapp" -ForegroundColor Cyan
+Write-Host "  [!] Lembrete: A IA (LLM) e paga a parte pelo provedor" -ForegroundColor Yellow
+Write-Host "      (OpenAI, Anthropic, etc). Voce controla seus gastos." -ForegroundColor Yellow
 Write-Host ""
-Write-Host "  Outros comandos:" -ForegroundColor White
-Write-Host "    simplifia list        → Ver packs disponiveis" -ForegroundColor DarkGray
-Write-Host "    simplifia doctor      → Verificar ambiente" -ForegroundColor DarkGray
-Write-Host "    simplifia --help      → Ajuda completa" -ForegroundColor DarkGray
+Write-Host "  Ajuda: https://simplifia.vercel.app/downloads" -ForegroundColor Blue
+Write-Host "  Telegram: https://t.me/simplifia" -ForegroundColor Blue
 Write-Host ""
-Write-Host "  ⚠ Lembrete: A IA (LLM) e paga a parte pelo provedor" -ForegroundColor Yellow
-Write-Host "    (OpenAI, Anthropic, etc). Voce controla seus gastos." -ForegroundColor Yellow
+Write-Host "  Se voce instalou Docker agora: feche e reabra o Terminal" -ForegroundColor DarkGray
+Write-Host "  e rode: simplifia doctor" -ForegroundColor DarkGray
 Write-Host ""
-Write-Host "  📚 Ajuda: https://simplifia.com.br/downloads" -ForegroundColor Blue
-Write-Host "  💬 Telegram: https://t.me/simplifia" -ForegroundColor Blue
-Write-Host ""
-Write-Host "  🛡️ Antivirus bloqueou? E normal para .exe novos." -ForegroundColor DarkGray
-Write-Host "     Clique 'Mais opcoes' > 'Permitir' no seu antivirus." -ForegroundColor DarkGray
+Write-Host "  Antivirus bloqueou? E normal para .exe novos." -ForegroundColor DarkGray
+Write-Host "  Clique 'Mais opcoes' > 'Permitir' no seu antivirus." -ForegroundColor DarkGray
 Write-Host ""

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "simplifia"
-version = "1.0.2"
+version = "1.0.3"
 description = "SIMPLIFIA Installer - Instala packs de automação no OpenClawd"
 readme = "README.md"
 requires-python = ">=3.9"
