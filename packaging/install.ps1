@@ -1,55 +1,337 @@
+# ============================================================
 # SIMPLIFIA Installer - Windows (PowerShell)
 # Usage: irm https://install.simplifia.com | iex
+# 
+# Installs: CLI + Setup + OpenClaw/Clawdbot Runtime (Docker)
+# ============================================================
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "🚀 Instalando SIMPLIFIA..." -ForegroundColor Cyan
+# ============================================================
+# HELPERS
+# ============================================================
+
+function Write-Header {
+    Write-Host ""
+    Write-Host "⚡ SIMPLIFIA Installer" -ForegroundColor Magenta
+    Write-Host "   Automação sem código em 1 comando" -ForegroundColor Cyan
+    Write-Host ""
+}
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host "▶ $Message" -ForegroundColor Blue
+}
+
+function Write-Success {
+    param([string]$Message)
+    Write-Host "✓ $Message" -ForegroundColor Green
+}
+
+function Write-Warning {
+    param([string]$Message)
+    Write-Host "⚠ $Message" -ForegroundColor Yellow
+}
+
+function Write-Error {
+    param([string]$Message)
+    Write-Host "✗ $Message" -ForegroundColor Red
+}
+
+function Ask-YesNo {
+    param(
+        [string]$Prompt,
+        [string]$Default = "y"
+    )
+    
+    if ($env:SIMPLIFIA_NONINTERACTIVE -eq "1") {
+        return ($Default -eq "y")
+    }
+    
+    $hint = if ($Default -eq "y") { "[S/n]" } else { "[s/N]" }
+    $response = Read-Host "? $Prompt $hint"
+    
+    if ([string]::IsNullOrEmpty($response)) {
+        $response = $Default
+    }
+    
+    return ($response -match "^[SsYy]")
+}
+
+# ============================================================
+# PRE-CHECKS
+# ============================================================
+
+Write-Header
+
+Write-Success "Sistema: Windows"
 
 # Check Python
+Write-Step "Verificando Python..."
+
 try {
     $pyVersion = python --version 2>&1
-    Write-Host "✓ $pyVersion encontrado" -ForegroundColor Green
+    if ($pyVersion -match "Python (\d+)\.(\d+)") {
+        $major = [int]$Matches[1]
+        $minor = [int]$Matches[2]
+        
+        if ($major -lt 3 -or ($major -eq 3 -and $minor -lt 9)) {
+            Write-Error "Python $major.$minor encontrado, mas precisa de 3.9+"
+            Write-Host "  Download: https://python.org/downloads/" -ForegroundColor Yellow
+            exit 1
+        }
+        
+        Write-Success "Python $major.$minor encontrado"
+    }
 } catch {
-    Write-Host "❌ Python não encontrado. Instale Python 3.9+ primeiro." -ForegroundColor Red
-    Write-Host "   Download: https://www.python.org/downloads/" -ForegroundColor Yellow
+    Write-Error "Python não encontrado!"
+    Write-Host ""
+    Write-Host "  Download: https://python.org/downloads/" -ForegroundColor Yellow
+    Write-Host "  Marque 'Add Python to PATH' durante instalação" -ForegroundColor Yellow
+    Write-Host ""
     exit 1
 }
 
 # Check pip
 try {
     pip --version | Out-Null
-    Write-Host "✓ pip encontrado" -ForegroundColor Green
+    Write-Success "pip disponível"
 } catch {
-    Write-Host "⚠ pip não encontrado, tentando instalar..." -ForegroundColor Yellow
-    python -m ensurepip --upgrade
+    Write-Warning "pip não encontrado, tentando instalar..."
+    try {
+        python -m ensurepip --upgrade
+        Write-Success "pip instalado"
+    } catch {
+        Write-Error "Não foi possível instalar pip"
+        exit 1
+    }
 }
 
-# Install simplifia
-Write-Host "📦 Instalando simplifia via pip..." -ForegroundColor Cyan
+# ============================================================
+# INSTALL CLI
+# ============================================================
+
+Write-Host ""
+Write-Step "Instalando SIMPLIFIA CLI..."
+
+# Check if already installed
+$existingVersion = $null
 try {
-    pip install --user --upgrade simplifia
+    $existingVersion = (simplifia --version 2>&1) -replace '.*?(\d+\.\d+\.\d+).*', '$1'
+    Write-Success "SIMPLIFIA $existingVersion já instalado"
+    
+    if (Ask-YesNo "Atualizar para última versão?" "n") {
+        $upgradeFlag = "--upgrade"
+    } else {
+        $upgradeFlag = $null
+        Write-Success "Mantendo versão atual"
+    }
 } catch {
-    Write-Host "Tentando instalação via GitHub..." -ForegroundColor Yellow
-    pip install --user --upgrade git+https://github.com/pala7777/simplifia-installer.git
+    $upgradeFlag = "--upgrade"
 }
 
-# Check if Scripts is in PATH
+# Install/upgrade
+if ($upgradeFlag -or -not $existingVersion) {
+    try {
+        pip install --user $upgradeFlag simplifia 2>&1 | Out-Null
+    } catch {
+        try {
+            pip install --user $upgradeFlag git+https://github.com/pala7777/simplifia-installer.git 2>&1 | Out-Null
+        } catch {
+            Write-Error "Falha na instalação"
+            exit 1
+        }
+    }
+}
+
+# Add Scripts to PATH if needed
 $userScripts = "$env:APPDATA\Python\Python*\Scripts"
-$pathDirs = $env:PATH -split ";"
-$scriptsInPath = $pathDirs | Where-Object { $_ -like "*Python*Scripts*" }
+$scriptsPath = (Get-ChildItem $userScripts -ErrorAction SilentlyContinue | Select-Object -First 1)?.FullName
 
-if (-not $scriptsInPath) {
-    Write-Host ""
-    Write-Host "⚠ Adicione a pasta Scripts do Python ao PATH:" -ForegroundColor Yellow
-    Write-Host "   $userScripts" -ForegroundColor White
-    Write-Host ""
+if ($scriptsPath -and -not ($env:PATH -split ';' | Where-Object { $_ -like "*Python*Scripts*" })) {
+    $env:PATH = "$env:PATH;$scriptsPath"
+    Write-Warning "Adicionando $scriptsPath ao PATH"
+    
+    # Persist to user PATH
+    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if (-not ($userPath -split ';' | Where-Object { $_ -like "*Python*Scripts*" })) {
+        [Environment]::SetEnvironmentVariable("PATH", "$userPath;$scriptsPath", "User")
+        Write-Success "PATH atualizado permanentemente"
+    }
 }
 
+# Verify installation
+try {
+    $newVersion = (simplifia --version 2>&1) -replace '.*?(\d+\.\d+\.\d+).*', '$1'
+    Write-Success "SIMPLIFIA v$newVersion instalado"
+} catch {
+    Write-Error "Instalação falhou - 'simplifia' não encontrado"
+    Write-Host "  Tente: pip install --user simplifia" -ForegroundColor Yellow
+    exit 1
+}
+
+# ============================================================
+# SETUP (3 perguntas modo iniciante)
+# ============================================================
+
 Write-Host ""
-Write-Host "✅ SIMPLIFIA instalado!" -ForegroundColor Green
+Write-Step "Configuração inicial..."
+
+$configPath = "$env:USERPROFILE\.simplifia\config.json"
+
+if (Test-Path $configPath) {
+    if (Ask-YesNo "Configuração existente encontrada. Reconfigurar?" "n") {
+        simplifia setup --force
+    } else {
+        Write-Success "Mantendo configuração atual"
+    }
+} else {
+    if ($env:SIMPLIFIA_NONINTERACTIVE -eq "1") {
+        $env:SIMPLIFIA_NONINTERACTIVE = "1"
+        simplifia setup 2>&1 | Out-Null
+    } else {
+        simplifia setup
+    }
+}
+
+# ============================================================
+# RUNTIME (Docker)
+# ============================================================
+
 Write-Host ""
-Write-Host "Próximos passos:" -ForegroundColor Cyan
-Write-Host "  simplifia doctor            # Verificar ambiente"
-Write-Host "  simplifia list              # Ver packs disponíveis"
-Write-Host "  simplifia install whatsapp  # Instalar um pack"
+Write-Step "Verificando runtime OpenClaw/Clawdbot..."
+
+# Check if runtime already installed
+$runtimeInstalled = Test-Path "$env:USERPROFILE\.simplifia\clawdbot\docker-compose.yml"
+
+if ($runtimeInstalled) {
+    Write-Success "Runtime já instalado"
+}
+
+# Check Docker availability
+$dockerAvailable = $false
+try {
+    docker info 2>&1 | Out-Null
+    $dockerAvailable = $true
+    Write-Success "Docker disponível"
+} catch {
+    try {
+        docker --version 2>&1 | Out-Null
+        Write-Warning "Docker instalado mas não está rodando"
+        Write-Host "  Inicie o Docker Desktop" -ForegroundColor Yellow
+    } catch {
+        Write-Warning "Docker não instalado"
+    }
+}
+
+# Ask about runtime installation
+$installRuntime = $false
+
+if ($runtimeInstalled) {
+    # Check if running
+    $running = (docker ps --filter "name=simplifia-clawdbot" --format "{{.Names}}" 2>&1) -match "simplifia-clawdbot"
+    
+    if ($running) {
+        Write-Success "Runtime já está rodando"
+    } else {
+        if (Ask-YesNo "Iniciar runtime agora?" "y") {
+            simplifia clawdbot start
+        }
+    }
+} elseif ($dockerAvailable) {
+    Write-Host ""
+    Write-Host "O motor OpenClaw/Clawdbot é necessário para rodar automações." -ForegroundColor Cyan
+    Write-Host "Ele roda via Docker (isolado, seguro, fácil de remover)." -ForegroundColor Cyan
+    Write-Host ""
+    
+    if (Ask-YesNo "Instalar o motor OpenClaw/Clawdbot (Docker) agora? (recomendado)" "y") {
+        $installRuntime = $true
+    } else {
+        Write-Warning "Runtime não instalado"
+        Write-Host ""
+        Write-Host "  Você pode instalar depois com:" -ForegroundColor White
+        Write-Host "    simplifia clawdbot install --docker" -ForegroundColor Cyan
+        Write-Host "    simplifia clawdbot start" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "  Nota: Packs exigem o runtime para funcionar." -ForegroundColor Yellow
+    }
+} else {
+    Write-Warning "Docker não disponível - runtime não será instalado"
+    Write-Host ""
+    Write-Host "  Instale o Docker Desktop: https://docker.com/products/docker-desktop" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  Depois rode:" -ForegroundColor White
+    Write-Host "    simplifia clawdbot install --docker" -ForegroundColor Cyan
+    Write-Host "    simplifia clawdbot start" -ForegroundColor Cyan
+}
+
+# Install runtime if requested
+if ($installRuntime) {
+    Write-Host ""
+    Write-Step "Instalando runtime..."
+    
+    if ($env:SIMPLIFIA_NONINTERACTIVE -eq "1") {
+        $env:SIMPLIFIA_NONINTERACTIVE = "1"
+        simplifia clawdbot install --docker
+    } else {
+        simplifia clawdbot install --docker
+    }
+    
+    Write-Step "Iniciando runtime..."
+    simplifia clawdbot start
+    
+    # Health check
+    Write-Step "Verificando health..."
+    $healthOk = $false
+    
+    for ($i = 1; $i -le 30; $i++) {
+        $running = (docker ps --filter "name=simplifia-clawdbot" --filter "status=running" --format "{{.Names}}" 2>&1) -match "simplifia-clawdbot"
+        
+        if ($running) {
+            $healthOk = $true
+            break
+        }
+        
+        Start-Sleep -Seconds 1
+        Write-Host "." -NoNewline
+    }
+    Write-Host ""
+    
+    if ($healthOk) {
+        Write-Success "Runtime iniciado e saudável!"
+    } else {
+        Write-Warning "Runtime iniciado mas health check pendente"
+        Write-Host "  Ver logs: simplifia clawdbot logs" -ForegroundColor Cyan
+    }
+}
+
+# ============================================================
+# POST-INSTALLATION
+# ============================================================
+
+Write-Host ""
+Write-Step "Verificação final..."
+simplifia doctor
+
+Write-Host ""
+Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Green
+Write-Host "  ✅ SIMPLIFIA instalado com sucesso!" -ForegroundColor Green
+Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Green
+Write-Host ""
+Write-Host "  Próximos passos:" -ForegroundColor White
+Write-Host ""
+Write-Host "    1. Instalar um pack:"
+Write-Host "       simplifia install whatsapp" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "    2. Testar (modo seguro):"
+Write-Host "       simplifia test whatsapp" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "    3. Atualizar:"
+Write-Host "       simplifia update whatsapp" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  ⚠ Lembrete: A IA (LLM) é paga à parte pelo provedor" -ForegroundColor Yellow
+Write-Host "    (OpenAI, Anthropic, etc). Você controla seus gastos." -ForegroundColor Yellow
+Write-Host ""
+Write-Host "  Ajuda: https://simplifia.com.br/downloads" -ForegroundColor Blue
+Write-Host "  Telegram: https://t.me/simplifia" -ForegroundColor Blue
 Write-Host ""

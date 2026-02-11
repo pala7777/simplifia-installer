@@ -131,7 +131,13 @@ def clawdbot_install(use_docker: bool = True):
     
     # Pull image
     console.print()
-    if Confirm.ask("Baixar imagem Docker agora?", default=True):
+    
+    # Check for non-interactive mode
+    should_pull = True
+    if os.environ.get("SIMPLIFIA_NONINTERACTIVE") != "1":
+        should_pull = Confirm.ask("Baixar imagem Docker agora?", default=True)
+    
+    if should_pull:
         console.print("[dim]Baixando imagem (pode demorar)...[/]")
         try:
             subprocess.run(
