@@ -1,0 +1,119 @@
+name: Test Clean Install
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Show environment
+        run: |
+          echo "OS: $(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2)"
+          echo "Python: $(python3 --version)"
+          echo "Docker: $(docker --version)"
+          
+      - name: Clean environment (remove any pre-existing)
+        run: |
+          rm -rf ~/.simplifia ~/.local/bin/simplifia 2>/dev/null || true
+          pip3 uninstall simplifia -y 2>/dev/null || true
+          
+      - name: Run installer
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/pala7777/simplifia-installer/main/packaging/install.sh | SIMPLIFIA_NONINTERACTIVE=1 bash
+          
+      - name: Add to PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+        
+      - name: Verify CLI
+        run: |
+          simplifia --version
+          
+      - name: Run doctor
+        run: |
+          simplifia doctor
+          
+      - name: List packs
+        run: |
+          simplifia list
+          
+      - name: Install WhatsApp pack
+        run: |
+          simplifia install whatsapp
+          
+      - name: Test WhatsApp pack
+        run: |
+          simplifia test whatsapp
+          
+      - name: Show status
+        run: |
+          simplifia status
+          
+      - name: Test runtime install (Docker)
+        run: |
+          simplifia clawdbot doctor
+          SIMPLIFIA_NONINTERACTIVE=1 simplifia clawdbot install --docker
+          simplifia clawdbot start
+          sleep 10
+          docker ps
+          simplifia clawdbot status
+
+  test-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Show environment
+        shell: pwsh
+        run: |
+          Write-Host "OS: $([System.Environment]::OSVersion)"
+          Write-Host "Python: $(python --version)"
+          Write-Host "Docker: $(docker --version)"
+          
+      - name: Clean environment
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force "$env:USERPROFILE\.simplifia" -ErrorAction SilentlyContinue
+          pip uninstall simplifia -y 2>$null
+          
+      - name: Run installer
+        shell: pwsh
+        run: |
+          $env:SIMPLIFIA_NONINTERACTIVE = "1"
+          irm https://raw.githubusercontent.com/pala7777/simplifia-installer/main/packaging/install.ps1 | iex
+          
+      - name: Verify CLI
+        shell: pwsh
+        run: |
+          # Refresh PATH
+          $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User") + ";" + $env:PATH
+          simplifia --version
+          
+      - name: Run doctor
+        shell: pwsh
+        run: |
+          simplifia doctor
+          
+      - name: List packs
+        shell: pwsh
+        run: |
+          simplifia list
+          
+      - name: Install WhatsApp pack
+        shell: pwsh
+        run: |
+          simplifia install whatsapp
+          
+      - name: Test WhatsApp pack
+        shell: pwsh
+        run: |
+          simplifia test whatsapp
+          
+      - name: Show status
+        shell: pwsh
+        run: |
+          simplifia status
