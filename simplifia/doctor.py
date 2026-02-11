@@ -9,6 +9,18 @@ from rich.panel import Panel
 
 console = Console()
 
+def get_openclawd_path() -> Path:
+    """Get OpenClawd base path (cross-platform).
+    
+    Note: This is kept for compatibility but OpenClawd is no longer required.
+    SIMPLIFIA now uses ~/.simplifia as the primary installation path.
+    """
+    if os.name == 'nt':  # Windows
+        base = Path(os.environ.get('USERPROFILE', '~'))
+    else:  # Unix
+        base = Path.home()
+    return base / '.openclawd'
+
 def get_simplifia_path() -> Path:
     """Get SIMPLIFIA config path (cross-platform)."""
     if os.name == 'nt':  # Windows
