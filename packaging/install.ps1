@@ -132,25 +132,14 @@ try {
 
 # Install/upgrade
 if ($upgradeFlag -or -not $existingVersion) {
-    # Try PyPI first, then GitHub
-    $installed = $false
+    # Install directly from GitHub (package not yet on PyPI)
+    Write-Host "  Baixando do GitHub..." -ForegroundColor DarkGray
+    pip install --user git+https://github.com/pala7777/simplifia-installer.git 2>&1 | Out-Null
     
-    # Try PyPI
-    pip install --user $upgradeFlag simplifia 2>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        $installed = $true
-    }
-    
-    # If PyPI failed, try GitHub
-    if (-not $installed) {
-        pip install --user $upgradeFlag git+https://github.com/pala7777/simplifia-installer.git 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            $installed = $true
-        }
-    }
-    
-    if (-not $installed) {
-        Write-Error "Falha na instalação"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Falha na instalação via pip"
+        Write-Host "  Tente manualmente:" -ForegroundColor Yellow
+        Write-Host "    pip install git+https://github.com/pala7777/simplifia-installer.git" -ForegroundColor Cyan
         exit 1
     }
 }
