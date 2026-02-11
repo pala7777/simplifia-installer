@@ -95,6 +95,23 @@ def list_available():
 
 
 @app.command()
+def activate(
+    code: str = typer.Argument(None, help="Codigo de ativacao"),
+    email: str = typer.Option("", "--email", "-e", help="Email (opcional)"),
+):
+    """Ativa uma licenca (codigo de compra)."""
+    from .license import run_activate
+    run_activate(code or "", email)
+
+
+@app.command()
+def license():
+    """Mostra status da licenca."""
+    from .license import run_license_status
+    run_license_status()
+
+
+@app.command()
 def install(
     pack: str = typer.Argument(..., help="Nome do pack (ex: whatsapp)"),
     force: bool = typer.Option(False, "--force", "-f", help="Reinstalar"),
@@ -102,9 +119,14 @@ def install(
     """Instala um pack."""
     from .setup import is_configured, run_setup
     from .install import install_pack
+    from .license import check_entitlement_or_exit
     
     if not is_configured():
         run_setup()
+    
+    # Check entitlement before installing
+    if not check_entitlement_or_exit(pack):
+        return
     
     install_pack(pack, force=force)
 
