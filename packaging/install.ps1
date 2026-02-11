@@ -335,3 +335,5 @@ Write-Host ""
 Write-Host "  Ajuda: https://simplifia.com.br/downloads" -ForegroundColor Blue
 Write-Host "  Telegram: https://t.me/simplifia" -ForegroundColor Blue
 Write-Host ""
+Write-Host "  💡 Se 'simplifia' não for encontrado, feche e reabra o PowerShell." -ForegroundColor Yellow
+Write-Host ""
