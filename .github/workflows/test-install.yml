@@ -101,19 +101,34 @@ jobs:
       - name: Add Python Scripts to PATH
         shell: pwsh
         run: |
-          $userBase = (python -c "import site; print(site.USER_BASE)").Trim()
-          $scriptsPath = Join-Path $userBase "Scripts"
-          Write-Host "Scripts path: $scriptsPath"
-          Write-Host "Exists: $(Test-Path $scriptsPath)"
-          Get-ChildItem $scriptsPath -ErrorAction SilentlyContinue | Select -First 5
-          Add-Content -Path $env:GITHUB_PATH -Value $scriptsPath
-          Write-Host "Added to GITHUB_PATH"
+          # Find where simplifia was actually installed
+          $possiblePaths = @(
+            "$env:APPDATA\Python\Python312\Scripts",
+            "$env:LOCALAPPDATA\Programs\Python\Python312\Scripts",
+            (python -c "import sys; print(sys.prefix + '\\Scripts')"),
+            (python -c "import site; print(site.USER_BASE + '\\Scripts')"),
+            "C:\hostedtoolcache\windows\Python\3.12.10\x64\Scripts"
+          )
+          
+          foreach ($path in $possiblePaths) {
+            if (Test-Path "$path\simplifia.exe" -ErrorAction SilentlyContinue) {
+              Write-Host "Found simplifia at: $path"
+              Add-Content -Path $env:GITHUB_PATH -Value $path
+              break
+            }
+            elseif (Test-Path $path -ErrorAction SilentlyContinue) {
+              Write-Host "Path exists but no simplifia: $path"
+              Get-ChildItem $path | Select -First 10
+            }
+          }
+          
+          # Also try find directly
+          Write-Host "Searching for simplifia..."
+          Get-ChildItem -Path C:\ -Filter "simplifia.exe" -Recurse -ErrorAction SilentlyContinue 2>$null | Select -First 3
           
       - name: Verify CLI
         shell: pwsh
         run: |
-          Write-Host "PATH: $env:PATH"
-          Get-Command simplifia -ErrorAction SilentlyContinue
           simplifia --version
           
       - name: Run doctor
