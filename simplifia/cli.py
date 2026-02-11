@@ -13,6 +13,7 @@ from .update import update_pack
 from .state import get_installed_packs, get_pack_status
 from .test import test_pack
 from .logs import show_logs
+from .setup import run_setup, is_configured, show_config, reset_config
 
 app = typer.Typer(
     name="simplifia",
@@ -28,6 +29,12 @@ def version_callback(value: bool):
         raise typer.Exit()
 
 
+def ensure_setup():
+    """Run setup wizard if not configured yet."""
+    if not is_configured():
+        run_setup()
+
+
 @app.callback()
 def main(
     version: bool = typer.Option(
@@ -40,8 +47,30 @@ def main(
 
 
 @app.command()
+def setup(
+    advanced: bool = typer.Option(False, "--advanced", "-a", help="Modo avançado (todas as opções)"),
+    force: bool = typer.Option(False, "--force", "-f", help="Reconfigurar mesmo se já configurado"),
+):
+    """⚙️ Configura SIMPLIFIA (wizard inicial)."""
+    run_setup(force=force, advanced=advanced)
+
+
+@app.command()
+def config():
+    """📋 Mostra configuração atual."""
+    show_config()
+
+
+@app.command("config-reset")
+def config_reset():
+    """🔄 Reseta configuração para padrões."""
+    reset_config()
+
+
+@app.command()
 def doctor():
     """🩺 Verifica se o ambiente está pronto para usar SIMPLIFIA."""
+    ensure_setup()
     run_doctor()
 
 
@@ -57,6 +86,7 @@ def install(
     force: bool = typer.Option(False, "--force", "-f", help="Reinstala mesmo se já existir"),
 ):
     """⬇️ Instala um pack no OpenClawd."""
+    ensure_setup()
     install_pack(pack, force=force)
 
 
