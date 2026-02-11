@@ -13,7 +13,7 @@ set -e
 # CONFIG
 # ============================================================
 
-SIMPLIFIA_VERSION="v1.0.1"
+SIMPLIFIA_VERSION="v1.0.2"
 SIMPLIFIA_BIN_DIR="$HOME/.simplifia/bin"
 SIMPLIFIA_BIN_PATH="$SIMPLIFIA_BIN_DIR/simplifia"
 

@@ -17,7 +17,7 @@ $ErrorActionPreference = "Stop"
 # CONFIG
 # ============================================================
 
-$SIMPLIFIA_VERSION = "v1.0.1"
+$SIMPLIFIA_VERSION = "v1.0.2"
 $SIMPLIFIA_BIN_DIR = "$env:USERPROFILE\.simplifia\bin"
 $SIMPLIFIA_EXE_URL = "https://github.com/pala7777/simplifia-installer/releases/download/$SIMPLIFIA_VERSION/simplifia-windows.exe"
 $SIMPLIFIA_EXE_PATH = "$SIMPLIFIA_BIN_DIR\simplifia.exe"
