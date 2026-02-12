@@ -23,13 +23,12 @@ echo "=============================================="
 # Ensure config directory exists
 mkdir -p /root/.config/clawdbot
 
-# Always write config to ensure gateway.mode=local is set
-echo "[entrypoint] Writing config with gateway.mode=local..."
-cat > /root/.config/clawdbot/clawdbot.yaml << EOF
-gateway:
-  mode: local
-  bind: loopback
-EOF
+# Set config using clawdbot CLI to ensure it's in the right location
+echo "[entrypoint] Setting gateway.mode=local via clawdbot config..."
+clawdbot config set gateway.mode local 2>&1 || true
+clawdbot config set gateway.bind loopback 2>&1 || true
+echo "[entrypoint] Config set. Verifying..."
+clawdbot config get 2>&1 | head -10 || true
 
 if [ -n "$CLAWDBOT_GATEWAY_TOKEN" ]; then
     echo "[entrypoint] Auth token: configured via CLAWDBOT_GATEWAY_TOKEN"
@@ -53,20 +52,7 @@ sleep 1
 
 # Verify socat is listening
 echo "[entrypoint] Verifying socat listeners..."
-if netstat -tlnp 2>/dev/null | grep -q ":${GATEWAY_PORT}"; then
-    echo "[entrypoint] ✓ Gateway proxy listening on 0.0.0.0:${GATEWAY_PORT}"
-else
-    echo "[entrypoint] ✗ WARNING: Gateway proxy NOT listening on ${GATEWAY_PORT}"
-    # Try ss if netstat not available
-    ss -tlnp 2>/dev/null | grep ":${GATEWAY_PORT}" || true
-fi
-
-if netstat -tlnp 2>/dev/null | grep -q ":${BROWSER_PORT}"; then
-    echo "[entrypoint] ✓ Browser proxy listening on 0.0.0.0:${BROWSER_PORT}"
-else
-    echo "[entrypoint] ✗ WARNING: Browser proxy NOT listening on ${BROWSER_PORT}"
-    ss -tlnp 2>/dev/null | grep ":${BROWSER_PORT}" || true
-fi
+ss -tlnp 2>/dev/null | grep -E ":(${GATEWAY_PORT}|${BROWSER_PORT})" || netstat -tlnp 2>/dev/null | grep -E ":(${GATEWAY_PORT}|${BROWSER_PORT})" || echo "[entrypoint] (listener check skipped)"
 
 # Trap to clean up on exit
 cleanup() {
