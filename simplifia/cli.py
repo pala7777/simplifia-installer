@@ -415,22 +415,79 @@ def whatsapp_next():
 
 @whatsapp_app.command("status")
 def whatsapp_status():
-    """Mostra status do pack WhatsApp."""
-    from .state import get_installed_packs
+    """Mostra status completo do WhatsApp Gold."""
+    import json
+    from pathlib import Path
+    from rich.console import Console
+    from rich.table import Table
+    from .auth import load_auth, auth_path
+    from .api import get_link_status, get_whatsapp_profile, ApiError
     
-    installed = get_installed_packs()
+    console = Console()
+    auth = load_auth()
     
-    if 'whatsapp' not in installed:
-        print_warn("Pack WhatsApp nao instalado.")
-        print_info("Execute: simplifia install whatsapp")
+    print_header("WhatsApp Gold - Status")
+    
+    # 1. Check activation
+    if not auth:
+        print_warn("❌ Nao ativado")
+        print_info("Execute: simplifia activate <TOKEN>")
+        return
+    print_ok("✅ Ativado")
+    
+    # 2. Check device link
+    auth_dir = auth_path().parent
+    link_file = auth_dir / "device_link.json"
+    device_id = None
+    
+    try:
+        link_status = get_link_status(auth.session_token)
+        if link_status.linked and link_status.device_id:
+            print_ok(f"✅ Dispositivo vinculado (codigo: ...{link_status.link_code_last4})")
+            device_id = link_status.device_id
+            # Save device_id
+            link_file.write_text(json.dumps({
+                "device_id": device_id,
+                "link_code_last4": link_status.link_code_last4,
+                "claimed_at": link_status.claimed_at,
+            }, indent=2))
+        else:
+            print_warn("❌ Dispositivo nao vinculado")
+            print_info("Execute: simplifia link")
+            return
+    except ApiError as e:
+        print_warn(f"❌ Erro ao verificar link: {e}")
         return
     
-    info = installed['whatsapp']
-    print_header("Pack WhatsApp - Status")
-    print(f"  Versao: {info.get('version', '?')}")
-    print(f"  Instalado em: {info.get('installed_at', '?')}")
-    print("")
-    print_info("Para ver proximos passos: simplifia whatsapp next")
+    # 3. Check profile
+    try:
+        profile = get_whatsapp_profile(auth.session_token, device_id)
+        if profile:
+            print_ok(f"✅ Perfil configurado: {profile.get('business_name', '?')}")
+        else:
+            print_warn("❌ Perfil nao configurado")
+            print_info("Configure em: https://simplifia.com.br/setup/whatsapp")
+            return
+    except ApiError as e:
+        print_warn(f"❌ Erro ao verificar perfil: {e}")
+        return
+    
+    # 4. Check local config
+    config_dir = Path.home() / ".simplifia" / "whatsapp"
+    config_path = config_dir / "config.json"
+    
+    if config_path.exists():
+        try:
+            config = json.loads(config_path.read_text())
+            meta = config.get("_meta", {})
+            print_ok(f"✅ Config local: {meta.get('config_version', '?')}")
+            print_info(f"   Ultima sync: {meta.get('applied_at', '?')[:19] if meta.get('applied_at') else '?'}")
+        except Exception:
+            print_warn("❌ Config local corrompida")
+    else:
+        print_warn("❌ Config local nao encontrada")
+        print_info("Execute: simplifia whatsapp sync")
+    
     print("")
 
 
@@ -491,9 +548,19 @@ def whatsapp_sync():
             profile["id"]
         )
         
-        # Save config locally
-        config_path = auth_dir / "whatsapp_gold_config.json"
+        # Save config locally to ~/.simplifia/whatsapp/config.json
+        config_dir = Path.home() / ".simplifia" / "whatsapp"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        config_path = config_dir / "config.json"
         config_path.write_text(json.dumps(config.config, indent=2, ensure_ascii=False))
+        
+        # Save sync metadata
+        sync_meta = config_dir / "sync_meta.json"
+        sync_meta.write_text(json.dumps({
+            "config_version": config.config_version,
+            "applied_at": config.applied_at,
+            "profile_id": profile["id"],
+        }, indent=2))
         
         print_ok(f"Configuracao salva: {config_path}")
         print_info(f"  Versao: {config.config_version}")
@@ -515,10 +582,11 @@ def whatsapp_sync():
 def whatsapp_apply():
     """Aplica configuracao do WhatsApp Gold ao runtime."""
     import json
+    from datetime import datetime, timezone
     from pathlib import Path
     from rich.console import Console
     from rich.table import Table
-    from .auth import load_auth, auth_path
+    from .auth import load_auth
     
     console = Console()
     auth = load_auth()
@@ -527,8 +595,8 @@ def whatsapp_apply():
         print_warn("Nao ativado.")
         raise typer.Exit(code=2)
     
-    auth_dir = auth_path().parent
-    config_path = auth_dir / "whatsapp_gold_config.json"
+    config_dir = Path.home() / ".simplifia" / "whatsapp"
+    config_path = config_dir / "config.json"
     
     if not config_path.exists():
         print_warn("Configuracao nao encontrada.")
@@ -565,18 +633,141 @@ def whatsapp_apply():
     console.print(table)
     print("")
     
-    # Apply to runtime (copy to pack config location)
-    pack_config_dir = Path.home() / ".simplifia" / "packs" / "whatsapp"
-    pack_config_dir.mkdir(parents=True, exist_ok=True)
+    # Log the apply action
+    log_dir = Path.home() / ".simplifia" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "whatsapp_gold.log"
     
-    runtime_config = pack_config_dir / "gold_config.json"
-    runtime_config.write_text(json.dumps(config, indent=2, ensure_ascii=False))
+    log_entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "action": "config_applied",
+        "config_version": meta.get("config_version"),
+        "business_name": business.get("name"),
+    }
+    
+    with open(log_file, "a") as f:
+        f.write(json.dumps(log_entry) + "\n")
     
     print_ok("Configuracao aplicada!")
-    print_info(f"  Arquivo: {runtime_config}")
+    print_info(f"  Config: {config_path}")
+    print_info(f"  Log: {log_file}")
     print("")
     print_info("O pack WhatsApp usara estas configuracoes na proxima execucao.")
     print("")
+
+
+@whatsapp_app.command("test")
+def whatsapp_test(
+    message: str = typer.Argument(None, help="Mensagem para simular"),
+):
+    """Testa simulacao do WhatsApp Gold com mensagem de exemplo."""
+    import json
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from rich.console import Console
+    from rich.panel import Panel
+    from .auth import load_auth, auth_path
+    from .api import ApiError
+    
+    console = Console()
+    auth = load_auth()
+    
+    if not auth:
+        print_warn("Nao ativado.")
+        raise typer.Exit(code=2)
+    
+    # Get device_id
+    link_file = auth_path().parent / "device_link.json"
+    if not link_file.exists():
+        print_warn("Dispositivo nao vinculado. Execute: simplifia link")
+        raise typer.Exit(code=2)
+    
+    try:
+        link_data = json.loads(link_file.read_text())
+        device_id = link_data.get("device_id")
+    except Exception:
+        print_warn("Erro ao ler device_id")
+        raise typer.Exit(code=1)
+    
+    # Default test message
+    test_message = message or "Oi, qual o preco do servico?"
+    
+    print_header("WhatsApp Gold - Teste de Simulacao")
+    print(f"  Mensagem: \"{test_message}\"")
+    print("")
+    
+    # Call simulate API
+    import httpx
+    from .api import api_base
+    
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            r = client.post(
+                f"{api_base()}/whatsapp/simulate",
+                json={"device_id": device_id, "message": test_message},
+                headers={
+                    "Authorization": f"Bearer {auth.session_token}",
+                    "Content-Type": "application/json"
+                }
+            )
+            
+            if r.status_code == 401:
+                print_warn("Sessao expirada. Execute: simplifia activate <TOKEN>")
+                raise typer.Exit(code=2)
+            
+            data = r.json()
+            
+            if not data.get("ok"):
+                print_warn(f"Erro: {data.get('error', 'Simulacao falhou')}")
+                raise typer.Exit(code=1)
+            
+            sim = data["simulation"]
+            analysis = sim.get("analysis", {})
+            response = sim.get("response", {})
+            profile = sim.get("profile_used", {})
+            
+            # Display results
+            console.print(Panel(
+                f"[bold]Intencao:[/bold] {analysis.get('intent', '?')} ({analysis.get('confidence', 0)}% confianca)\n"
+                f"[bold]Escalar:[/bold] {'⚠️ SIM - ' + str(analysis.get('escalate_reason', '')) if analysis.get('escalate') else '✅ Nao'}\n"
+                f"[bold]Acao:[/bold] {response.get('action', '?')} - {response.get('action_reason', '')}",
+                title="[cyan]Analise[/cyan]",
+                border_style="cyan"
+            ))
+            
+            console.print(Panel(
+                response.get("draft_reply", "(sem resposta)"),
+                title="[green]Resposta Sugerida[/green]",
+                border_style="green"
+            ))
+            
+            console.print(f"\n[dim]Perfil usado: {profile.get('business_name', '?')} | Tom: {profile.get('tone', '?')}[/dim]")
+            
+            # Log the test
+            log_dir = Path.home() / ".simplifia" / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_file = log_dir / "whatsapp_gold.log"
+            
+            log_entry = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "action": "simulate_test",
+                "message": test_message,
+                "intent": analysis.get("intent"),
+                "confidence": analysis.get("confidence"),
+                "escalate": analysis.get("escalate", False),
+                "draft_reply": response.get("draft_reply"),
+                "mode": "DRAFT_APPROVAL",
+            }
+            
+            with open(log_file, "a") as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+            
+            print("")
+            print_info(f"Log salvo em: {log_file}")
+            
+    except httpx.RequestError as e:
+        print_warn(f"Erro de conexao: {e}")
+        raise typer.Exit(code=1)
 
 
 # ============================================================
