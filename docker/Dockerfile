@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     git \
     socat \
+    procps \
+    iproute2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install clawdbot globally
