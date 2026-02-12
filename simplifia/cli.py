@@ -217,6 +217,17 @@ def status():
             print_ok(f"Dispositivo vinculado ✅ (codigo: ...{link_status.link_code_last4})")
             if link_status.claimed_at:
                 print_info(f"  Vinculado em: {link_status.claimed_at[:10]}")
+            
+            # Save device_id for sync commands
+            if link_status.device_id:
+                import json
+                from .auth import auth_path
+                link_file = auth_path().parent / "device_link.json"
+                link_file.write_text(json.dumps({
+                    "device_id": link_status.device_id,
+                    "link_code_last4": link_status.link_code_last4,
+                    "claimed_at": link_status.claimed_at,
+                }, indent=2))
         else:
             print_warn("Dispositivo nao vinculado ao site.")
             print_info("Execute: simplifia link")
@@ -420,6 +431,151 @@ def whatsapp_status():
     print(f"  Instalado em: {info.get('installed_at', '?')}")
     print("")
     print_info("Para ver proximos passos: simplifia whatsapp next")
+    print("")
+
+
+@whatsapp_app.command("sync")
+def whatsapp_sync():
+    """Sincroniza configuracao do WhatsApp Gold do servidor."""
+    import json
+    from pathlib import Path
+    from rich.console import Console
+    from .auth import load_auth, auth_path
+    from .api import get_whatsapp_profile, get_whatsapp_config, ApiError
+    
+    console = Console()
+    auth = load_auth()
+    
+    if not auth:
+        print_warn("Nao ativado.")
+        print_info("Execute: simplifia activate <TOKEN>")
+        raise typer.Exit(code=2)
+    
+    # Get device_id from stored link info
+    auth_dir = auth_path().parent
+    link_file = auth_dir / "device_link.json"
+    
+    if not link_file.exists():
+        print_warn("Dispositivo nao vinculado.")
+        print_info("Execute: simplifia link")
+        raise typer.Exit(code=2)
+    
+    try:
+        link_data = json.loads(link_file.read_text())
+        device_id = link_data.get("device_id")
+    except Exception:
+        print_warn("Erro ao ler dados do dispositivo.")
+        raise typer.Exit(code=1)
+    
+    if not device_id:
+        print_warn("Device ID nao encontrado. Execute: simplifia link")
+        raise typer.Exit(code=2)
+    
+    print_header("WhatsApp Gold - Sincronizando")
+    
+    try:
+        # Get profile
+        profile = get_whatsapp_profile(auth.session_token, device_id)
+        
+        if not profile:
+            print_warn("Nenhum perfil configurado.")
+            print_info("Configure em: https://simplifia.com.br/setup/whatsapp")
+            raise typer.Exit(code=1)
+        
+        print_ok(f"Perfil encontrado: {profile.get('business_name', '?')}")
+        
+        # Get full config
+        config = get_whatsapp_config(
+            auth.session_token,
+            device_id,
+            profile["id"]
+        )
+        
+        # Save config locally
+        config_path = auth_dir / "whatsapp_gold_config.json"
+        config_path.write_text(json.dumps(config.config, indent=2, ensure_ascii=False))
+        
+        print_ok(f"Configuracao salva: {config_path}")
+        print_info(f"  Versao: {config.config_version}")
+        print_info(f"  Aplicado em: {config.applied_at}")
+        print("")
+        print_next("Execute: simplifia whatsapp apply")
+        
+    except ApiError as e:
+        if "UNAUTHORIZED" in str(e):
+            print_warn("Sessao expirada. Execute: simplifia activate <TOKEN>")
+        elif "NOT_FOUND" in str(e):
+            print_warn("Perfil nao encontrado. Configure em: https://simplifia.com.br/setup/whatsapp")
+        else:
+            print_warn(f"Erro: {e}")
+        raise typer.Exit(code=1)
+
+
+@whatsapp_app.command("apply")
+def whatsapp_apply():
+    """Aplica configuracao do WhatsApp Gold ao runtime."""
+    import json
+    from pathlib import Path
+    from rich.console import Console
+    from rich.table import Table
+    from .auth import load_auth, auth_path
+    
+    console = Console()
+    auth = load_auth()
+    
+    if not auth:
+        print_warn("Nao ativado.")
+        raise typer.Exit(code=2)
+    
+    auth_dir = auth_path().parent
+    config_path = auth_dir / "whatsapp_gold_config.json"
+    
+    if not config_path.exists():
+        print_warn("Configuracao nao encontrada.")
+        print_info("Execute primeiro: simplifia whatsapp sync")
+        raise typer.Exit(code=1)
+    
+    try:
+        config = json.loads(config_path.read_text())
+    except Exception as e:
+        print_warn(f"Erro ao ler configuracao: {e}")
+        raise typer.Exit(code=1)
+    
+    print_header("WhatsApp Gold - Aplicando Configuracao")
+    
+    # Show config summary
+    table = Table(title="Configuracao")
+    table.add_column("Campo")
+    table.add_column("Valor")
+    
+    business = config.get("business", {})
+    table.add_row("Negocio", business.get("name", "-"))
+    table.add_row("Cidade", business.get("city", "-"))
+    
+    ai = config.get("ai", {})
+    table.add_row("Tom", ai.get("tone", "-"))
+    table.add_row("Idioma", ai.get("language", "-"))
+    
+    safety = config.get("safety", {})
+    table.add_row("Modo", safety.get("mode", "-"))
+    
+    meta = config.get("_meta", {})
+    table.add_row("Versao", meta.get("config_version", "-"))
+    
+    console.print(table)
+    print("")
+    
+    # Apply to runtime (copy to pack config location)
+    pack_config_dir = Path.home() / ".simplifia" / "packs" / "whatsapp"
+    pack_config_dir.mkdir(parents=True, exist_ok=True)
+    
+    runtime_config = pack_config_dir / "gold_config.json"
+    runtime_config.write_text(json.dumps(config, indent=2, ensure_ascii=False))
+    
+    print_ok("Configuracao aplicada!")
+    print_info(f"  Arquivo: {runtime_config}")
+    print("")
+    print_info("O pack WhatsApp usara estas configuracoes na proxima execucao.")
     print("")
 
 

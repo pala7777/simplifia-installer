@@ -134,6 +134,7 @@ class LinkStartResponse:
 class LinkStatusResponse:
     """Response from link status."""
     linked: bool
+    device_id: Optional[str] = None
     claimed_at: Optional[str] = None
     device_fingerprint: Optional[str] = None
     link_code_last4: Optional[str] = None
@@ -248,7 +249,126 @@ def get_link_status(
         
         return LinkStatusResponse(
             linked=data.get("linked", False),
+            device_id=data.get("device_id"),
             claimed_at=data.get("claimed_at"),
             device_fingerprint=data.get("device_fingerprint"),
             link_code_last4=data.get("link_code_last4"),
         )
+
+
+# ============================================================
+# WHATSAPP GOLD API
+# ============================================================
+
+@dataclass
+class WhatsAppConfig:
+    """WhatsApp Gold configuration from server."""
+    profile_id: str
+    config_version: str
+    applied_at: str
+    config: dict[str, Any]
+    instructions: list[str]
+
+
+def get_whatsapp_config(
+    session_token: str,
+    device_id: str,
+    profile_id: str,
+    timeout_s: float = 30.0
+) -> WhatsAppConfig:
+    """
+    Get WhatsApp Gold config (calls /apply to generate machine-ready config).
+    
+    Args:
+        session_token: JWT session token
+        device_id: Device link ID
+        profile_id: WhatsApp profile ID
+        timeout_s: Request timeout
+        
+    Returns:
+        WhatsAppConfig with full machine config
+        
+    Raises:
+        ApiError: If request fails
+    """
+    url = f"{api_base()}/whatsapp/apply"
+    
+    with httpx.Client(timeout=timeout_s) as client:
+        r = client.post(
+            url,
+            json={"device_id": device_id, "profile_id": profile_id},
+            headers={
+                "Authorization": f"Bearer {session_token}",
+                "Content-Type": "application/json"
+            }
+        )
+        
+        if r.status_code == 401:
+            raise ApiError("UNAUTHORIZED")
+        if r.status_code == 404:
+            raise ApiError("NOT_FOUND")
+        if r.status_code >= 400:
+            try:
+                data = r.json()
+                msg = data.get("error", f"HTTP {r.status_code}")
+            except Exception:
+                msg = f"HTTP {r.status_code}"
+            raise ApiError(msg)
+        
+        data = r.json()
+        
+        if not data.get("ok"):
+            raise ApiError(data.get("error", "Config fetch failed"))
+        
+        return WhatsAppConfig(
+            profile_id=profile_id,
+            config_version=data["config_version"],
+            applied_at=data["applied_at"],
+            config=data["config"],
+            instructions=data.get("instructions", []),
+        )
+
+
+def get_whatsapp_profile(
+    session_token: str,
+    device_id: str,
+    timeout_s: float = 20.0
+) -> Optional[dict[str, Any]]:
+    """
+    Get WhatsApp profile for device.
+    
+    Args:
+        session_token: JWT session token
+        device_id: Device link ID
+        timeout_s: Request timeout
+        
+    Returns:
+        Profile dict or None if not found
+        
+    Raises:
+        ApiError: If request fails
+    """
+    url = f"{api_base()}/whatsapp/profile?device_id={device_id}"
+    
+    with httpx.Client(timeout=timeout_s) as client:
+        r = client.get(
+            url,
+            headers={"Authorization": f"Bearer {session_token}"}
+        )
+        
+        if r.status_code == 401:
+            raise ApiError("UNAUTHORIZED")
+        if r.status_code >= 400:
+            try:
+                data = r.json()
+                msg = data.get("error", f"HTTP {r.status_code}")
+            except Exception:
+                msg = f"HTTP {r.status_code}"
+            raise ApiError(msg)
+        
+        data = r.json()
+        
+        if not data.get("ok"):
+            raise ApiError(data.get("error", "Profile fetch failed"))
+        
+        return data.get("profile")
