@@ -182,9 +182,52 @@ def update(
 
 @app.command()
 def status():
-    """Mostra status dos packs instalados."""
+    """Mostra status da ativacao, link e packs instalados."""
+    from rich.console import Console
+    from rich.table import Table
+    from .auth import load_auth
+    from .api import get_link_status, ApiError
     from .state import get_installed_packs, get_pack_status
     
+    console = Console()
+    auth = load_auth()
+    
+    # 1. Activation status
+    print_header("Status SimplifIA")
+    
+    if not auth:
+        print_warn("Nao ativado.")
+        print_info("Execute: fale com @SimplifIABot → /meuacesso → simplifia activate <TOKEN>")
+        return
+    
+    table = Table(title="Ativacao")
+    table.add_column("Campo")
+    table.add_column("Valor")
+    table.add_row("Produto", auth.product or "-")
+    table.add_row("Nicho", auth.niche or "-")
+    table.add_row("Packs", ", ".join(auth.entitlements) if auth.entitlements else "(nenhum)")
+    table.add_row("Ativado em", auth.created_at or "-")
+    console.print(table)
+    
+    # 2. Device link status
+    print("")
+    try:
+        link_status = get_link_status(auth.session_token)
+        if link_status.linked:
+            print_ok(f"Dispositivo vinculado ✅ (codigo: ...{link_status.link_code_last4})")
+            if link_status.claimed_at:
+                print_info(f"  Vinculado em: {link_status.claimed_at[:10]}")
+        else:
+            print_warn("Dispositivo nao vinculado ao site.")
+            print_info("Execute: simplifia link")
+    except ApiError as e:
+        if "UNAUTHORIZED" in str(e):
+            print_warn("Sessao expirada. Execute: simplifia activate <TOKEN>")
+        else:
+            print_warn(f"Erro ao verificar link: {e}")
+    
+    # 3. Installed packs
+    print("")
     installed = get_installed_packs()
     
     if not installed:
@@ -201,6 +244,80 @@ def status():
         print(f"      Status: {pack_status}")
         print(f"      Instalado: {info.get('installed_at', '?')}")
         print("")
+
+
+@app.command()
+def link():
+    """Vincula este computador ao Assistente Web."""
+    import platform
+    from datetime import datetime
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.text import Text
+    from .auth import load_auth
+    from .api import start_device_link, ApiError, default_fingerprint
+    from . import __version__
+    
+    console = Console()
+    auth = load_auth()
+    
+    if not auth:
+        print_warn("Ative primeiro!")
+        print_info("Fale com @SimplifIABot e rode: simplifia activate <TOKEN>")
+        raise typer.Exit(code=2)
+    
+    try:
+        # Get link code
+        resp = start_device_link(
+            session_token=auth.session_token,
+            device_fingerprint=default_fingerprint(),
+            cli_version=__version__,
+            os_name=platform.system().lower(),
+        )
+        
+        # Parse expiration
+        try:
+            exp_dt = datetime.fromisoformat(resp.expires_at.replace('Z', '+00:00'))
+            now = datetime.now(exp_dt.tzinfo)
+            minutes_left = int((exp_dt - now).total_seconds() / 60)
+            exp_text = f"{minutes_left} minutos" if minutes_left > 0 else "agora"
+        except Exception:
+            exp_text = "10 minutos"
+        
+        # Build panel
+        content = Text()
+        content.append("\n")
+        content.append("Codigo: ", style="bold")
+        content.append(f"{resp.link_code}", style="bold cyan on dark_blue")
+        content.append("\n\n")
+        content.append("Acesse: ", style="bold")
+        content.append(resp.url, style="underline blue")
+        content.append("\n\n")
+        content.append(f"Expira em: {exp_text}\n", style="dim")
+        
+        panel = Panel(
+            content,
+            title="[bold green]Conectar ao Assistente Web[/bold green]",
+            border_style="green",
+            padding=(1, 2),
+        )
+        console.print(panel)
+        
+        # Windows tip
+        if platform.system() == "Windows":
+            print_info("Dica: Selecione o codigo e pressione Ctrl+C para copiar.")
+        
+    except ApiError as e:
+        if "UNAUTHORIZED" in str(e):
+            print_warn("Sessao expirada.")
+            print_info("Execute: simplifia activate <TOKEN>")
+            raise typer.Exit(code=2)
+        elif "RATE_LIMITED" in str(e):
+            print_warn("Muitas tentativas. Aguarde alguns minutos.")
+            raise typer.Exit(code=1)
+        else:
+            print_warn(f"Erro: {e}")
+            raise typer.Exit(code=1)
 
 
 @app.command()
