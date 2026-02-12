@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     socat \
     procps \
     iproute2 \
+    bash \
     && rm -rf /var/lib/apt/lists/*
 
 # Install clawdbot globally

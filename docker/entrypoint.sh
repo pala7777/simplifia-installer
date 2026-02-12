@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
 # SIMPLIFIA Clawdbot Entrypoint
@@ -76,7 +76,7 @@ cleanup() {
     kill $SOCAT_GW_PID $SOCAT_BR_PID 2>/dev/null || true
     exit 0
 }
-trap cleanup SIGTERM SIGINT
+trap cleanup TERM INT
 
 echo "[entrypoint] Starting Clawdbot gateway on 127.0.0.1:${INTERNAL_GATEWAY_PORT}..."
 
