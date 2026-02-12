@@ -103,7 +103,7 @@ def activate(
     from rich.console import Console
     from rich.table import Table
     from .auth import save_auth
-    from .api import activate_token, default_fingerprint, ApiError
+    from .api import activate_token, default_fingerprint, ApiError, DeviceLimitError
     
     console = Console()
     
@@ -126,6 +126,15 @@ def activate(
         table.add_row("Packs", ", ".join(resp.entitlements) if resp.entitlements else "(nenhum)")
         console.print(table)
         console.print("\n  Proximo: [bold]simplifia install <pack>[/bold]")
+        
+    except DeviceLimitError as e:
+        # Friendly device limit error with actionable steps
+        console.print(f"\n[bold red]❌ Limite de dispositivos atingido ({e.active_devices}/{e.max_devices})[/bold red]\n")
+        console.print("Para liberar um slot, fale com o suporte no Telegram:")
+        console.print("  → Envie [bold]/humano[/bold] no @SimplifIABot\n")
+        console.print("[dim](Admin) Use: /revogar SEU-CÓDIGO[/dim]")
+        console.print("[dim]Ver status: /dispositivos[/dim]")
+        raise typer.Exit(code=1)
         
     except ApiError as e:
         console.print(f"[red]Erro de ativacao:[/red] {e}")

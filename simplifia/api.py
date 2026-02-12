@@ -36,6 +36,14 @@ class ApiError(RuntimeError):
     pass
 
 
+class DeviceLimitError(ApiError):
+    """Device limit reached - too many devices activated."""
+    def __init__(self, message: str, max_devices: int, active_devices: int):
+        super().__init__(message)
+        self.max_devices = max_devices
+        self.active_devices = active_devices
+
+
 def activate_token(
     token: str,
     device_fingerprint: Optional[str] = None,
@@ -68,7 +76,19 @@ def activate_token(
             # Try to get error message from response
             try:
                 data = r.json()
-                msg = data.get("error", f"HTTP {r.status_code}")
+                error_code = data.get("error", "")
+                
+                # Handle device limit specifically
+                if r.status_code == 409 and error_code == "DEVICE_LIMIT_REACHED":
+                    raise DeviceLimitError(
+                        message=data.get("message", "Limite de dispositivos atingido"),
+                        max_devices=data.get("max_devices", 1),
+                        active_devices=data.get("active_devices", 1),
+                    )
+                
+                msg = error_code or f"HTTP {r.status_code}"
+            except DeviceLimitError:
+                raise  # Re-raise DeviceLimitError
             except Exception:
                 msg = f"HTTP {r.status_code}"
             raise ApiError(f"Activation failed: {msg}")
