@@ -23,15 +23,13 @@ echo "=============================================="
 # Ensure config directory exists
 mkdir -p /root/.config/clawdbot
 
-# Set up minimal config if needed
-if [ ! -f /root/.config/clawdbot/clawdbot.yaml ]; then
-    echo "[entrypoint] Creating default config..."
-    cat > /root/.config/clawdbot/clawdbot.yaml << EOF
+# Always write config to ensure gateway.mode=local is set
+echo "[entrypoint] Writing config with gateway.mode=local..."
+cat > /root/.config/clawdbot/clawdbot.yaml << EOF
 gateway:
   mode: local
   bind: loopback
 EOF
-fi
 
 if [ -n "$CLAWDBOT_GATEWAY_TOKEN" ]; then
     echo "[entrypoint] Auth token: configured via CLAWDBOT_GATEWAY_TOKEN"
@@ -129,12 +127,14 @@ else
 fi
 
 echo "=============================================="
-if [ "$INTERNAL_CODE" != "000" ] && [ "$PROXY_CODE" != "000" ]; then
+# Check for actual HTTP response (not 000 which means connection failed)
+if [ "$INTERNAL_CODE" != "000" ] && [ "$INTERNAL_CODE" != "000000" ] && [ "$PROXY_CODE" != "000" ] && [ "$PROXY_CODE" != "000000" ]; then
     echo "[entrypoint] ✓ SELF-TEST PASSED - Service reachable!"
 else
     echo "[entrypoint] ✗ SELF-TEST FAILED"
-    echo "[entrypoint]   Internal: ${INTERNAL_CODE} (expected: 200/401)"
-    echo "[entrypoint]   Proxy: ${PROXY_CODE} (expected: 200/401)"
+    echo "[entrypoint]   Internal: ${INTERNAL_CODE} (expected: 200/401, got connection failure)"
+    echo "[entrypoint]   Proxy: ${PROXY_CODE} (expected: 200/401, got connection failure)"
+    echo "[entrypoint]   Check Clawdbot logs above for errors!"
 fi
 echo "=============================================="
 echo "[entrypoint] Ready. Host should now be able to reach:"
