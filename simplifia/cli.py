@@ -104,8 +104,16 @@ def activate(
     from rich.table import Table
     from .auth import save_auth
     from .api import activate_token, default_fingerprint, ApiError, DeviceLimitError
+    from . import __version__
     
     console = Console()
+    
+    def version_tuple(v: str) -> tuple:
+        """Convert version string to tuple for comparison."""
+        try:
+            return tuple(int(x) for x in v.split('.'))
+        except (ValueError, AttributeError):
+            return (0, 0, 0)
     
     try:
         fp = fingerprint or default_fingerprint()
@@ -118,12 +126,23 @@ def activate(
             niche=resp.niche,
         )
         
+        # Check CLI version and warn if outdated
+        if resp.min_cli_version:
+            current = version_tuple(__version__)
+            minimum = version_tuple(resp.min_cli_version)
+            if current < minimum:
+                console.print(f"\n[bold yellow]⚠️  Seu CLI está desatualizado (v{__version__})[/bold yellow]")
+                console.print(f"[yellow]Recomendado: v{resp.min_cli_version}+[/yellow]")
+                console.print("[yellow]Atualize: [bold]pip install --upgrade simplifia[/bold][/yellow]\n")
+        
         table = Table(title="SimplifIA Ativado ✅")
         table.add_column("Campo")
         table.add_column("Valor")
         table.add_row("Produto", str(resp.product or "-"))
         table.add_row("Nicho", str(resp.niche or "-"))
         table.add_row("Packs", ", ".join(resp.entitlements) if resp.entitlements else "(nenhum)")
+        if resp.active_devices and resp.max_devices:
+            table.add_row("Dispositivos", f"{resp.active_devices}/{resp.max_devices}")
         console.print(table)
         console.print("\n  Proximo: [bold]simplifia install <pack>[/bold]")
         

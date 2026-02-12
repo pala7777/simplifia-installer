@@ -29,6 +29,10 @@ class ActivateResponse:
     session_token: str
     product: Optional[str] = None
     niche: Optional[str] = None
+    max_devices: Optional[int] = None
+    active_devices: Optional[int] = None
+    min_cli_version: Optional[str] = None
+    latest_cli_version: Optional[str] = None
 
 
 class ApiError(RuntimeError):
@@ -107,6 +111,10 @@ def activate_token(
             session_token=st,
             product=data.get("product"),
             niche=data.get("niche"),
+            max_devices=data.get("max_devices"),
+            active_devices=data.get("active_devices"),
+            min_cli_version=data.get("min_cli_version"),
+            latest_cli_version=data.get("latest_cli_version"),
         )
 
 
